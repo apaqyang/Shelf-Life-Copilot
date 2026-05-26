@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint fmt check run clean
+.PHONY: help install dev test lint fmt check run scan clean
 
 help: ## 显示所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -27,6 +27,12 @@ check: lint test ## 跑所有检查（等效 CI）
 
 run: ## 启动 FastAPI dev server
 	uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+
+scan: ## 跑一次扫描，用法 make scan CUSTOMER=customerA [TODAY=2026-05-26] [DRY=1]
+	@uv run python -m src.cli \
+		--customer $(CUSTOMER) \
+		$(if $(TODAY),--today $(TODAY),) \
+		$(if $(DRY),--dry-run,)
 
 clean: ## 清理缓存与覆盖率产物
 	find . -type d -name '__pycache__' -exec rm -rf {} +
