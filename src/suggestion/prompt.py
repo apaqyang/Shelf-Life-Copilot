@@ -32,7 +32,6 @@ def build_user_prompt(
     batch: Batch,
     alert: Alert,
     customer: CustomerConfig,
-    avg_savings_per_batch: float,
     feedback: str | None = None,
 ) -> str:
     """Build the user-facing prompt with batch context + customer constraints."""
@@ -43,7 +42,7 @@ def build_user_prompt(
         f"库存：{batch.stock_qty:g} {batch.unit}",
         f"剩余天数：{alert.days_left} 天（紧急程度：{alert.severity.value}）",
         f"客户行业：{customer.industry}",
-        f"参考节省金额（单批次均值）：¥{avg_savings_per_batch:,.0f}",
+        f"参考节省金额（单批次均值）：¥{customer.avg_savings_per_batch:,.0f}",
         "",
         "可选动作：",
         actions_block,

@@ -19,7 +19,6 @@ from src.suggestion.prompt import SYSTEM_PROMPT, build_user_prompt
 from src.suggestion.schema import TOOL_NAME, build_suggestion_tool
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_AVG_SAVINGS = 5000.0
 DEFAULT_MAX_TOKENS = 1024
 
 
@@ -48,12 +47,10 @@ class SuggestionEngine:
         self,
         client: AsyncAnthropic,
         model: str = DEFAULT_MODEL,
-        avg_savings_per_batch: float = DEFAULT_AVG_SAVINGS,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
         self._client = client
         self._model = model
-        self._avg_savings = avg_savings_per_batch
         self._max_tokens = max_tokens
 
     async def suggest(
@@ -68,7 +65,6 @@ class SuggestionEngine:
             batch=batch,
             alert=alert,
             customer=customer,
-            avg_savings_per_batch=self._avg_savings,
             feedback=feedback,
         )
         tool = cast(ToolParam, build_suggestion_tool(customer.enabled_actions))

@@ -85,6 +85,8 @@ class TestRealMockData:
         assert config.industry == "frozen_seafood"
         assert ActionType.EMPLOYEE_CANTEEN in config.disabled_actions
         assert config.alert_thresholds.yellow == 30
+        # 150万/年 ÷ 180 批次 ≈ 8333
+        assert config.avg_savings_per_batch == 8333
 
     def test_customer_b_config_loads_with_tighter_thresholds(self) -> None:
         config = load_customer_config("customerB")
@@ -93,6 +95,8 @@ class TestRealMockData:
         assert ActionType.TRANSFORM in config.disabled_actions
         assert config.alert_thresholds.yellow == 14
         assert config.alert_thresholds.red == 3
+        # 86万/年 ÷ 350 批次 ≈ 2457
+        assert config.avg_savings_per_batch == 2457
 
     def test_customer_a_batches_load(self) -> None:
         batches = load_batches("customerA")

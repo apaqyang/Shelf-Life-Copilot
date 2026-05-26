@@ -73,6 +73,24 @@ class TestCustomerConfigInvariants:
             CustomerConfig.model_validate(payload)
 
 
+class TestCustomerConfigAvgSavings:
+    def test_default_avg_savings_when_not_provided(self) -> None:
+        config = CustomerConfig.model_validate(_base_payload())
+        assert config.avg_savings_per_batch == 5000.0
+
+    def test_custom_avg_savings_accepted(self) -> None:
+        config = CustomerConfig.model_validate(_base_payload(avg_savings_per_batch=8333.0))
+        assert config.avg_savings_per_batch == 8333.0
+
+    def test_zero_avg_savings_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            CustomerConfig.model_validate(_base_payload(avg_savings_per_batch=0))
+
+    def test_negative_avg_savings_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            CustomerConfig.model_validate(_base_payload(avg_savings_per_batch=-100))
+
+
 class TestCustomerConfigImmutability:
     def test_model_is_frozen(self) -> None:
         config = CustomerConfig.model_validate(_base_payload())
