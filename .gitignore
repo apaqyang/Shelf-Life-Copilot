@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.cache/
+
+# Type checking & linting
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Environment variables (含 API key、企微 secret 等敏感配置)
+.env
+.env.local
+.env.*.local
+
+# Claude Code 本地设置（含本地权限缓存，不应共享）
+.claude/settings.local.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & databases
+*.log
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# Distribution artifacts
+node_modules/
