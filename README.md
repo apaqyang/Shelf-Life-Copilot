@@ -3,6 +3,11 @@
 > 食品行业临期 / 保质期管理 AI 副驾
 > 每天早上 7 点，把"哪个批次快过期 + 该怎么处置 + 能省多少钱"通过企微卡片主动推送给采购/生产/供应链总监，一键决策、自动派单。
 
+[![CI](https://github.com/apaqyang/Shelf-Life-Copilot/actions/workflows/ci.yaml/badge.svg)](https://github.com/apaqyang/Shelf-Life-Copilot/actions/workflows/ci.yaml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
+[![Code style](https://img.shields.io/badge/code%20style-ruff-000000)](https://github.com/astral-sh/ruff)
+[![License](https://img.shields.io/badge/license-Proprietary-red)](#)
+
 ---
 
 ## 当前阶段
