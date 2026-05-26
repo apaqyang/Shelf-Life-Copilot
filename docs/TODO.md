@@ -1,36 +1,50 @@
 # TODO — Shelf-Life Copilot
 
 > 范围：v0.1 Mock Demo（2 周）
-> 起点：（待填）
-> 截止：起点 + 14 天
-> 配套：[PRD.md](PRD.md) §8 / [TECH_SPEC.md](TECH_SPEC.md)
+> 起点：2026-05-26
+> 配套：[PRD.md](PRD.md) §8 / [TECH_SPEC.md](TECH_SPEC.md) / [ARCHITECTURE.md](ARCHITECTURE.md)
+
+---
+
+## 进度概览（更新于 2026-05-26）
+
+- ✅ **工程基础设施**：pyproject / ruff / mypy strict / pytest / GitHub Actions CI / pre-commit
+- ✅ **数据层**：models + repository + Mock 数据（A:7 批次 / B:6 批次）
+- ✅ **监测引擎**：`src/alerts/`（per-customer 阈值）
+- ✅ **LLM 建议生成器**：`src/suggestion/`（Claude tool_use 强制 JSON）
+- ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过）
+- ⏳ **企微卡片渲染层**（Week 2 剩余）
+- ⏳ **Demo 现场彩排**（Week 2 剩余）
+
+**当前指标**：104 测试 passed · 覆盖率 100% · 9+ commits · CI 全绿
+**仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
 
 ## Week 1 — 基础设施 + 推送链路
 
 ### 后端骨架
-- [ ] 初始化 FastAPI 项目结构（`src/main.py` / `src/api/` / `src/core/`）
-- [ ] 配置 uv + pyproject.toml + ruff/black
-- [ ] 写 `.env.example`（ANTHROPIC_API_KEY / WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET）
-- [ ] 接入 Anthropic SDK，跑通最简调用
-- [ ] 接入企微 API，**跑通最简文本推送**到测试群
+- [x] 初始化 FastAPI 项目结构 → `src/main.py` + 子包（models / alerts / suggestion / repository / scheduler / cli）
+- [x] 配置 uv + pyproject.toml + ruff（弃用 black，ruff 一统 lint+format）+ mypy strict + pytest + coverage
+- [x] 写 `.env.example`（ANTHROPIC_API_KEY / WECOM_* / APP_ENV）
+- [x] 接入 Anthropic SDK，跑通最简调用 → `SuggestionEngine`（async，tool_use 强制 JSON）
+- [ ] 接入企微 API，**跑通最简文本推送**到测试群 → 移至 Week 2
 
 ### 数据层
-- [ ] 设计 Mock JSON schema（物料 / 批次 / 库存 / 历史决策）
-- [ ] 填入客户 A 5-10 个 mock 批次
-- [ ] 填入客户 B 5-10 个 mock 批次
-- [ ] 设计并写入 `customer_A.actions.json` / `customer_B.actions.json`
+- [x] 设计 Mock JSON schema → `src/models/{batch,alert,customer,suggestion,thresholds,action}.py`
+- [x] 填入客户 A 7 个 mock 批次（覆盖健康/YELLOW/ORANGE/RED/已过期）→ `data/batches/customerA.json`
+- [x] 填入客户 B 6 个 mock 批次（用收紧阈值 14/7/3）→ `data/batches/customerB.json`
+- [x] 设计并写入 `customer_A.actions.json` / `customer_B.actions.json`（含 avg_savings_per_batch）
 
 ### 监测引擎
-- [ ] 实现剩余保质期计算（days_left）
-- [ ] 实现三档预警阈值（≤30 黄 / ≤15 橙 / ≤7 红）
-- [ ] 接入 APScheduler，配置每日 07:00 触发任务
+- [x] 实现剩余保质期计算 → `src/alerts/monitor.py::calculate_days_left`
+- [x] 实现三档预警阈值（per-customer 配置）→ `classify_severity`
+- [x] 接入 APScheduler，每日 07:00 触发 → `src/scheduler/scheduler.py::DailyScheduler`
 
 ### LLM Prompt 工程
-- [ ] 起草核心建议 Prompt（含动作集合约束 + JSON 输出 schema）
-- [ ] Schema 校验 + 越界标签（`is_standard=false`）
-- [ ] 跑通 5+ 个真实场景，目标合规率 100%
+- [x] 起草核心建议 Prompt → `src/suggestion/prompt.py`（含改方案分支）
+- [x] Schema 校验 + 越界标签 → tool_use 动态 enum 限定 + `is_standard` 字段
+- [ ] **跑通 5+ 个真实场景验证合规率 100%** → 需 ANTHROPIC_API_KEY 真实调用（mock 测试已通）
 
 ---
 
@@ -40,7 +54,7 @@
 - [ ] 实现 4 套企微卡片模板（预警 / 工单 / 回执 / 越界红标）
 - [ ] 实现 `✅ 同意` 按钮回调 → 自动生成工单卡片，@车间主任
 - [ ] 实现 `❌ 稍后` 按钮 → 4 小时后再推
-- [ ] 实现 `💬 改方案` 文字反馈 → 单轮重生成（携带原卡片上下文 + 用户反馈）
+- [ ] 实现 `💬 改方案` 文字反馈 → 单轮重生成（SuggestionEngine 已支持 feedback 参数）
 
 ### 双场景验收
 - [ ] 客户 A：3 张卡片跑通（虾仁 / 鱼糜 / 越界改方案）
@@ -49,10 +63,33 @@
 - [ ] 改方案单轮重生成跑通，含越界场景红标
 
 ### Demo 现场准备
-- [ ] Demo 演讲稿内部彩排 ≥ 2 次（[DEMO_SCRIPT.md](DEMO_SCRIPT.md)）
-- [ ] **Demo 失败兜底视频**录制（2 分钟，含整套卡片演示）
+- [x] 内部 Demo 演讲稿成稿 → [DEMO_SCRIPT.md](DEMO_SCRIPT.md)
+- [ ] Demo 演讲稿内部彩排 ≥ 2 次
+- [ ] **Demo 失败兜底视频**录制（2 分钟）
 - [ ] FAQ 8 题熟记 + 现场角色分工确定
 - [ ] 现场设备清单核对（手机 + 电脑 + 4G 热点 + 镜像线）
+
+---
+
+## 额外完成（不在原 TODO 但实际做了）
+
+**CI/CD 基础设施**：
+- [x] git init + GitHub 远程 `apaqyang/Shelf-Life-Copilot`
+- [x] GitHub Actions CI（lint + test 3.11/3.12 矩阵 + coverage artifact）
+- [x] README badges（CI / Python / ruff / License）
+- [x] pre-commit 配置（ruff + mypy + trailing-whitespace / merge-conflict / detect-private-key 等）
+- [x] Makefile：`install / dev / test / lint / fmt / check / run / scan / clean`
+
+**CLI 入口**：
+- [x] `python -m src.cli --customer X [--today YYYY-MM-DD] [--dry-run]`
+- [x] `make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1`
+
+**架构文档**：
+- [x] `README.md` 项目入口与导航
+- [x] `docs/ARCHITECTURE.md` 分层 / 依赖图 / sequence diagram / 设计决策
+
+**销售工具**：
+- [x] [PRD.md §12.1](PRD.md) 年损快速诊断问卷（8 题）+ v1.0 报价分档
 
 ---
 
@@ -71,10 +108,10 @@
 
 ## 阻塞 & 风险（每日同步）
 
-- [ ] 企微管理员 API 权限申请进度
-- [ ] Anthropic API 配额（预估 v0.1 测试 < $50）
-- [ ] 客户 A、B 实际可用动作清单（需销售按 §12.1 问卷调研后填）
-- [ ] Demo 时间约定（线下 vs 视频会议）
+- [ ] **企微管理员 API 权限申请进度** — 决定 Week 2 卡片层能否开工
+- [ ] **Anthropic API 配额** — 接好后即可跑"5+ 真实场景"验证
+- [ ] **客户 A、B 真实可用动作清单** — 销售按 [PRD §12.1](PRD.md) 问卷调研后回填到 `data/config/`
+- [ ] **Demo 时间约定** — 线下 / 视频会议
 
 ---
 
@@ -85,3 +122,6 @@
 - [ ] 多租户配置后台
 - [ ] 私有化部署方案
 - [ ] 跨批次联合优化（v1.5）
+- [ ] 决策日志持久化（Decision 模型 + SQLite/PostgreSQL）
+- [ ] 日志结构化（JSON logging + correlation id）
+- [ ] Prompt caching（评估 5-min TTL 命中率）
