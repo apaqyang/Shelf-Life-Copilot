@@ -4,6 +4,7 @@ from src.models.action import ActionType
 from src.models.alert import Alert
 from src.models.batch import Batch, Severity
 from src.models.customer import CustomerConfig
+from src.models.suggestion import Suggestion
 from src.models.thresholds import AlertThresholds
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "Batch",
     "CustomerConfig",
     "Severity",
+    "Suggestion",
 ]
