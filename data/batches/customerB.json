@@ -1,0 +1,68 @@
+[
+  {
+    "batch_id": "B-001",
+    "material_id": "M-B-001",
+    "material_name": "预制青菜盒饭馅料",
+    "production_date": "2026-05-24",
+    "expiry_date": "2026-05-31",
+    "stock_qty": 200.0,
+    "unit": "盒",
+    "warehouse": "中央厨房",
+    "customer_id": "customerB"
+  },
+  {
+    "batch_id": "B-002",
+    "material_id": "M-B-002",
+    "material_name": "预制肉丝盒饭馅料",
+    "production_date": "2026-05-23",
+    "expiry_date": "2026-05-29",
+    "stock_qty": 150.0,
+    "unit": "盒",
+    "warehouse": "中央厨房",
+    "customer_id": "customerB"
+  },
+  {
+    "batch_id": "B-003",
+    "material_id": "M-B-003",
+    "material_name": "预制糖醋排骨",
+    "production_date": "2026-05-21",
+    "expiry_date": "2026-06-04",
+    "stock_qty": 320.0,
+    "unit": "盒",
+    "warehouse": "2号厨房",
+    "customer_id": "customerB"
+  },
+  {
+    "batch_id": "B-004",
+    "material_id": "M-B-004",
+    "material_name": "预制咖喱鸡饭",
+    "production_date": "2026-05-26",
+    "expiry_date": "2026-06-20",
+    "stock_qty": 500.0,
+    "unit": "盒",
+    "warehouse": "1号厨房",
+    "customer_id": "customerB"
+  },
+  {
+    "batch_id": "B-005",
+    "material_id": "M-B-005",
+    "material_name": "预制虾仁炒饭",
+    "production_date": "2026-05-25",
+    "expiry_date": "2026-06-02",
+    "stock_qty": 280.0,
+    "unit": "盒",
+    "warehouse": "2号厨房",
+    "customer_id": "customerB"
+  },
+  {
+    "batch_id": "B-006",
+    "material_id": "M-B-006",
+    "material_name": "预制麻婆豆腐",
+    "production_date": "2026-05-23",
+    "expiry_date": "2026-06-06",
+    "stock_qty": 240.0,
+    "unit": "盒",
+    "warehouse": "1号厨房",
+    "customer_id": "customerB"
+  }
+]

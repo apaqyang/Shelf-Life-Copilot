@@ -2,27 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 
 from src.models.alert import Alert
 from src.models.batch import Batch, Severity
-
-
-@dataclass(frozen=True)
-class AlertThresholds:
-    """Day-count thresholds. Convention: days_left <= threshold → that severity."""
-
-    yellow: int = 30
-    orange: int = 15
-    red: int = 7
-
-    def __post_init__(self) -> None:
-        if not (self.red < self.orange < self.yellow):
-            raise ValueError(
-                "Thresholds must satisfy red < orange < yellow; "
-                f"got red={self.red}, orange={self.orange}, yellow={self.yellow}"
-            )
+from src.models.thresholds import AlertThresholds
 
 
 def calculate_days_left(expiry_date: date, today: date | None = None) -> int:

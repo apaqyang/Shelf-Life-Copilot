@@ -1,0 +1,23 @@
+{
+  "customer_id": "customerA",
+  "industry": "frozen_seafood",
+  "enabled_actions": [
+    "transform",
+    "discount_clearance",
+    "transfer_warehouse",
+    "report_loss"
+  ],
+  "disabled_actions": ["employee_canteen"],
+  "industry_phrases": {
+    "transform": "转加工为虾饺馅 / 鱼丸 等下游产品",
+    "discount_clearance": "打折清仓至 B2B 渠道",
+    "transfer_warehouse": "调拨至需求更急的分厂",
+    "report_loss": "报损处理"
+  },
+  "alert_thresholds": {
+    "yellow": 30,
+    "orange": 15,
+    "red": 7
+  },
+  "decision_makers": ["wecom_userid_zhangzong"]
+}

@@ -6,13 +6,8 @@ from datetime import date
 
 import pytest
 
-from src.alerts.monitor import (
-    AlertThresholds,
-    calculate_days_left,
-    classify_severity,
-    scan_batch,
-)
-from src.models import Batch, Severity
+from src.alerts.monitor import calculate_days_left, classify_severity, scan_batch
+from src.models import AlertThresholds, Batch, Severity
 
 
 @pytest.fixture
