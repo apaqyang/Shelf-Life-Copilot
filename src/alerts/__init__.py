@@ -1,14 +1,8 @@
-"""Alert detection engine."""
+"""Alert detection engine — pure functions over data models."""
 
-from src.alerts.monitor import (
-    AlertThresholds,
-    calculate_days_left,
-    classify_severity,
-    scan_batch,
-)
+from src.alerts.monitor import calculate_days_left, classify_severity, scan_batch
 
 __all__ = [
-    "AlertThresholds",
     "calculate_days_left",
     "classify_severity",
     "scan_batch",

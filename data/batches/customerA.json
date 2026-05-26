@@ -1,0 +1,79 @@
+[
+  {
+    "batch_id": "A-001",
+    "material_id": "M-A-001",
+    "material_name": "冷冻虾仁",
+    "production_date": "2026-03-15",
+    "expiry_date": "2026-06-14",
+    "stock_qty": 850.0,
+    "unit": "kg",
+    "warehouse": "1号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-002",
+    "material_id": "M-A-002",
+    "material_name": "冷冻鱼糜",
+    "production_date": "2026-03-10",
+    "expiry_date": "2026-06-08",
+    "stock_qty": 520.0,
+    "unit": "kg",
+    "warehouse": "1号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-003",
+    "material_id": "M-A-003",
+    "material_name": "冷冻墨鱼",
+    "production_date": "2026-02-28",
+    "expiry_date": "2026-05-31",
+    "stock_qty": 380.0,
+    "unit": "kg",
+    "warehouse": "2号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-004",
+    "material_id": "M-A-004",
+    "material_name": "冷冻鲍鱼",
+    "production_date": "2026-04-25",
+    "expiry_date": "2026-07-25",
+    "stock_qty": 200.0,
+    "unit": "kg",
+    "warehouse": "3号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-005",
+    "material_id": "M-A-005",
+    "material_name": "冷冻虾饺皮",
+    "production_date": "2026-02-22",
+    "expiry_date": "2026-05-23",
+    "stock_qty": 150.0,
+    "unit": "kg",
+    "warehouse": "1号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-006",
+    "material_id": "M-A-001",
+    "material_name": "冷冻虾仁",
+    "production_date": "2026-03-21",
+    "expiry_date": "2026-06-20",
+    "stock_qty": 1200.0,
+    "unit": "kg",
+    "warehouse": "1号冷库",
+    "customer_id": "customerA"
+  },
+  {
+    "batch_id": "A-007",
+    "material_id": "M-A-007",
+    "material_name": "冷冻三文鱼",
+    "production_date": "2026-04-04",
+    "expiry_date": "2026-06-03",
+    "stock_qty": 460.0,
+    "unit": "kg",
+    "warehouse": "4号冷库",
+    "customer_id": "customerA"
+  }
+]

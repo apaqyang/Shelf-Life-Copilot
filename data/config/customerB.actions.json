@@ -1,0 +1,23 @@
+{
+  "customer_id": "customerB",
+  "industry": "prepared_meals",
+  "enabled_actions": [
+    "employee_canteen",
+    "discount_clearance",
+    "transfer_warehouse",
+    "report_loss"
+  ],
+  "disabled_actions": ["transform"],
+  "industry_phrases": {
+    "employee_canteen": "转员工食堂消化",
+    "discount_clearance": "打折清仓至社区团购",
+    "transfer_warehouse": "调拨至需求更急的分厂",
+    "report_loss": "报损处理"
+  },
+  "alert_thresholds": {
+    "yellow": 14,
+    "orange": 7,
+    "red": 3
+  },
+  "decision_makers": ["wecom_userid_lizong"]
+}
