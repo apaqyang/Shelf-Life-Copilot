@@ -47,6 +47,7 @@ def customer() -> CustomerConfig:
         },
         alert_thresholds=AlertThresholds(),
         decision_makers=["userid_1"],
+        avg_savings_per_batch=5000.0,
     )
 
 
@@ -76,7 +77,7 @@ class TestBuildUserPrompt:
     def test_contains_batch_context(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        prompt = build_user_prompt(batch, alert, customer, avg_savings_per_batch=5000.0)
+        prompt = build_user_prompt(batch, alert, customer)
         assert "冷冻虾仁" in prompt
         assert "A-001" in prompt
         assert "19 天" in prompt
@@ -85,20 +86,28 @@ class TestBuildUserPrompt:
     def test_contains_enabled_actions(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        prompt = build_user_prompt(batch, alert, customer, avg_savings_per_batch=5000.0)
+        prompt = build_user_prompt(batch, alert, customer)
         assert "transform" in prompt
         assert "discount_clearance" in prompt
 
-    def test_avg_savings_formatted_with_thousands_separator(
-        self, batch: Batch, alert: Alert, customer: CustomerConfig
+    def test_uses_customer_avg_savings_with_thousands_separator(
+        self, batch: Batch, alert: Alert
     ) -> None:
-        prompt = build_user_prompt(batch, alert, customer, avg_savings_per_batch=8500.0)
+        customer = CustomerConfig(
+            customer_id="customerA",
+            industry="frozen_seafood",
+            enabled_actions=[ActionType.TRANSFORM],
+            alert_thresholds=AlertThresholds(),
+            decision_makers=["userid_1"],
+            avg_savings_per_batch=8500.0,
+        )
+        prompt = build_user_prompt(batch, alert, customer)
         assert "¥8,500" in prompt
 
     def test_no_feedback_section_when_feedback_none(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        prompt = build_user_prompt(batch, alert, customer, avg_savings_per_batch=5000.0)
+        prompt = build_user_prompt(batch, alert, customer)
         assert "用户反馈" not in prompt
 
     def test_feedback_section_added_when_feedback_present(
@@ -108,7 +117,6 @@ class TestBuildUserPrompt:
             batch,
             alert,
             customer,
-            avg_savings_per_batch=5000.0,
             feedback="虾饺线满了，改成打折清仓",
         )
         assert "用户反馈" in prompt

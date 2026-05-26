@@ -22,6 +22,7 @@ class CustomerConfig(BaseModel):
     industry_phrases: dict[ActionType, str] = Field(default_factory=dict)
     alert_thresholds: AlertThresholds
     decision_makers: list[str]
+    avg_savings_per_batch: float = Field(default=5000.0, gt=0.0)
 
     @field_validator("alert_thresholds", mode="before")
     @classmethod
