@@ -1,0 +1,158 @@
+[
+  {
+    "batch_id": "B-H01",
+    "customer_id": "customerB",
+    "material_name": "预制青菜盒饭馅料",
+    "decided_at": "2026-04-29T07:11:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "approved",
+    "savings_estimate": 2400.0,
+    "actual_savings": 2300.0,
+    "actual_qty": 195.0
+  },
+  {
+    "batch_id": "B-H02",
+    "customer_id": "customerB",
+    "material_name": "预制肉丝盒饭馅料",
+    "decided_at": "2026-05-01T07:09:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "approved",
+    "savings_estimate": 2800.0,
+    "actual_savings": 2700.0,
+    "actual_qty": 150.0
+  },
+  {
+    "batch_id": "B-H03",
+    "customer_id": "customerB",
+    "material_name": "预制糖醋排骨",
+    "decided_at": "2026-05-03T07:13:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 3100.0,
+    "actual_savings": 2950.0,
+    "actual_qty": 310.0
+  },
+  {
+    "batch_id": "B-H04",
+    "customer_id": "customerB",
+    "material_name": "预制青菜盒饭馅料",
+    "decided_at": "2026-05-05T07:12:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "approved",
+    "savings_estimate": 2200.0,
+    "actual_savings": 2150.0,
+    "actual_qty": 180.0
+  },
+  {
+    "batch_id": "B-H05",
+    "customer_id": "customerB",
+    "material_name": "预制咖喱鸡饭",
+    "decided_at": "2026-05-07T07:10:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "revised",
+    "savings_estimate": 2600.0,
+    "actual_savings": 2400.0,
+    "actual_qty": 220.0,
+    "notes": "改方案 1 次：原建议 employee_canteen → 总监改 discount_clearance"
+  },
+  {
+    "batch_id": "B-H06",
+    "customer_id": "customerB",
+    "material_name": "预制宫保鸡丁",
+    "decided_at": "2026-05-09T07:14:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "approved",
+    "savings_estimate": 1800.0,
+    "actual_savings": 1750.0,
+    "actual_qty": 160.0
+  },
+  {
+    "batch_id": "B-H07",
+    "customer_id": "customerB",
+    "material_name": "预制肉丝盒饭馅料",
+    "decided_at": "2026-05-11T07:11:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 3300.0,
+    "actual_savings": 3200.0,
+    "actual_qty": 280.0
+  },
+  {
+    "batch_id": "B-H08",
+    "customer_id": "customerB",
+    "material_name": "预制青菜盒饭馅料",
+    "decided_at": "2026-05-13T07:09:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "snoozed",
+    "savings_estimate": 2400.0,
+    "actual_savings": null,
+    "actual_qty": null
+  },
+  {
+    "batch_id": "B-H09",
+    "customer_id": "customerB",
+    "material_name": "预制糖醋排骨",
+    "decided_at": "2026-05-15T07:15:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "approved",
+    "savings_estimate": 2900.0,
+    "actual_savings": 2800.0,
+    "actual_qty": 280.0
+  },
+  {
+    "batch_id": "B-H10",
+    "customer_id": "customerB",
+    "material_name": "预制鱼香肉丝",
+    "decided_at": "2026-05-17T07:13:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "approved",
+    "savings_estimate": 2000.0,
+    "actual_savings": 1950.0,
+    "actual_qty": 170.0
+  },
+  {
+    "batch_id": "B-H11",
+    "customer_id": "customerB",
+    "material_name": "预制咖喱鸡饭",
+    "decided_at": "2026-05-19T07:10:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "approved",
+    "savings_estimate": 2700.0,
+    "actual_savings": 2550.0,
+    "actual_qty": 230.0
+  },
+  {
+    "batch_id": "B-H12",
+    "customer_id": "customerB",
+    "material_name": "预制宫保鸡丁",
+    "decided_at": "2026-05-21T07:12:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "rejected",
+    "savings_estimate": 1900.0,
+    "actual_savings": null,
+    "actual_qty": null,
+    "notes": "总监否决：当周食堂菜单已定，不接受调入新菜品"
+  },
+  {
+    "batch_id": "B-H13",
+    "customer_id": "customerB",
+    "material_name": "预制青菜盒饭馅料",
+    "decided_at": "2026-05-23T07:11:00+00:00",
+    "action": "employee_canteen",
+    "outcome": "approved",
+    "savings_estimate": 2500.0,
+    "actual_savings": 2400.0,
+    "actual_qty": 200.0
+  },
+  {
+    "batch_id": "B-H14",
+    "customer_id": "customerB",
+    "material_name": "预制糖醋排骨",
+    "decided_at": "2026-05-25T07:09:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 3200.0,
+    "actual_savings": 3050.0,
+    "actual_qty": 290.0
+  }
+]
