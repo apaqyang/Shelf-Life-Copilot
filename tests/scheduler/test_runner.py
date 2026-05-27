@@ -143,9 +143,63 @@ class TestScanResultModel:
             total_batches=0,
             alerts=[],
             suggestions=[],
+            cards=[],
             errors=[],
         )
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
             result.customer_id = "customerB"  # type: ignore[misc]
+
+
+class TestScanRunnerCardRendering:
+    """ScanRunner renders a Card per successful suggestion."""
+
+    @pytest.mark.asyncio
+    async def test_one_card_per_suggestion(self, mock_engine: AsyncMock) -> None:
+        runner = ScanRunner(engine=mock_engine)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        assert len(result.cards) == len(result.suggestions) == 6
+        assert all(c.is_standard for c in result.cards)
+
+    @pytest.mark.asyncio
+    async def test_no_cards_when_skip_llm(self, mock_engine: AsyncMock) -> None:
+        runner = ScanRunner(engine=mock_engine)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26), skip_llm=True)
+        assert result.cards == []
+
+    @pytest.mark.asyncio
+    async def test_out_of_scope_suggestion_routes_to_red_card(self) -> None:
+        from src.models.card import CardKind
+
+        engine = AsyncMock(spec=SuggestionEngine)
+
+        async def _suggest(
+            batch: Batch, alert: Alert, customer: CustomerConfig, feedback: str | None = None
+        ) -> Suggestion:
+            # employee_canteen is in customerA's disabled_actions
+            return Suggestion(
+                batch_id=batch.batch_id,
+                customer_id=customer.customer_id,
+                action=ActionType.EMPLOYEE_CANTEEN,
+                savings_estimate=2000.0,
+                rationale="员工内部消化",
+                confidence=0.7,
+                is_standard=False,
+                llm_model="claude-haiku-4-5",
+            )
+
+        engine.suggest = AsyncMock(side_effect=_suggest)
+        runner = ScanRunner(engine=engine)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        assert all(c.kind is CardKind.OUT_OF_SCOPE for c in result.cards)
+        assert all(not c.is_standard for c in result.cards)
+
+    @pytest.mark.asyncio
+    async def test_failed_suggestion_yields_no_card(self) -> None:
+        engine = AsyncMock(spec=SuggestionEngine)
+        engine.suggest = AsyncMock(side_effect=SuggestionEngineError("boom"))
+        runner = ScanRunner(engine=engine)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        assert result.cards == []
+        assert len(result.errors) == 6

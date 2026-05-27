@@ -2,7 +2,7 @@
 
 > 阶段：v0.1（Mock Demo）
 > 配套文档：[PRD.md](PRD.md) · [TECH_SPEC.md](TECH_SPEC.md) · [TODO.md](TODO.md)
-> 更新日期：2026-05-26
+> 更新日期：2026-05-27
 
 本文档讲清楚**代码长什么样**——分层、依赖方向、关键模块的边界。
 面向：新加入的工程师、客户 IT 评估、未来回头看 trade-off 的自己。
@@ -114,9 +114,15 @@ src/
 ├── repository/                 # I/O 层 · JSON 加载
 │   └── loader.py               # load_customer_config / load_batches
 │
-└── scheduler/                  # 编排层
-    ├── runner.py               # ScanRunner + ScanResult + ScanError
-    └── scheduler.py            # DailyScheduler（APScheduler 包装）
+├── scheduler/                  # 编排层
+│   ├── runner.py               # ScanRunner + ScanResult + ScanError
+│   └── scheduler.py            # DailyScheduler（APScheduler 包装）
+│
+└── wecom/                      # 渲染层 · 4 套卡片 + 推送 client（Protocol）
+    ├── cards.py                # render_alert / render_work_order /
+    │                           #   render_receipt / render_out_of_scope
+    │                           #   + render_card_for_alert (dispatcher)
+    └── client.py               # WecomClient Protocol + DryRunWecomClient
 ```
 
 **测试镜像**：`tests/` 与 `src/` 1:1 对应。
@@ -266,7 +272,8 @@ tests/
 | 项 | 当前状态 | v0.5 计划 |
 |---|---|---|
 | 真实 ERP / WMS 对接 | ❌ 只读 JSON | 加 ERPAdapter Protocol，实现 SAP/用友/金蝶 |
-| 企微卡片渲染与推送 | ❌ | 加 `src/wecom/` 模块，订阅 DailyScheduler 的 on_result |
+| 企微卡片渲染 | ✅ `src/wecom/cards.py`（4 模板，纯函数） | — |
+| 企微真实推送 | ❌（仅 `DryRunWecomClient`） | v0.5 加 `HttpWecomClient`，订阅 DailyScheduler 的 on_result |
 | 决策日志持久化（Decision 表） | ❌ | SQLite → PostgreSQL |
 | 改方案的多轮对话 | ❌（仅支持单轮） | v0.5 视情况再决定（PRD 决策已锁定单轮） |
 | 月度 PDF 报告 | ❌ | reportlab / weasyprint |
@@ -310,6 +317,7 @@ tests/
 | 启动 FastAPI dev server | `make run` |
 | 一次性扫描客户 A（dry-run） | `make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1` |
 | 一次性扫描客户 A（含 LLM） | `ANTHROPIC_API_KEY=sk-... make scan CUSTOMER=customerA` |
+| 渲染所有卡片到终端预览 | `ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` |
 
 ---
 

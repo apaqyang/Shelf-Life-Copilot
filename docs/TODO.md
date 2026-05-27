@@ -6,17 +6,18 @@
 
 ---
 
-## 进度概览（更新于 2026-05-26）
+## 进度概览（更新于 2026-05-27）
 
 - ✅ **工程基础设施**：pyproject / ruff / mypy strict / pytest / GitHub Actions CI / pre-commit
 - ✅ **数据层**：models + repository + Mock 数据（A:7 批次 / B:6 批次）
 - ✅ **监测引擎**：`src/alerts/`（per-customer 阈值）
 - ✅ **LLM 建议生成器**：`src/suggestion/`（Claude tool_use 强制 JSON）
 - ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过）
-- ⏳ **企微卡片渲染层**（Week 2 剩余）
+- ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
+- ⏳ **企微真实推送对接**（受阻于客户管理员权限，待 PoC 启动后接入）
 - ⏳ **Demo 现场彩排**（Week 2 剩余）
 
-**当前指标**：104 测试 passed · 覆盖率 100% · 9+ commits · CI 全绿
+**当前指标**：144 测试 passed · 覆盖率 100% · 10+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
@@ -51,9 +52,12 @@
 ## Week 2 — 卡片渲染 + 双场景演练 + Demo 彩排
 
 ### 卡片渲染层
-- [ ] 实现 4 套企微卡片模板（预警 / 工单 / 回执 / 越界红标）
-- [ ] 实现 `✅ 同意` 按钮回调 → 自动生成工单卡片，@车间主任
-- [ ] 实现 `❌ 稍后` 按钮 → 4 小时后再推
+- [x] 实现 4 套企微卡片模板（预警 / 工单 / 回执 / 越界红标）→ `src/wecom/cards.py`
+- [x] `WecomClient` Protocol + `DryRunWecomClient`（按钮信息 metadata 化，真实推送 v0.5 接入）
+- [x] `ScanRunner` 自动渲染卡片，`ScanResult.cards` 含成品
+- [x] CLI `--render-cards` 离线预览 markdown
+- [ ] 实现 `✅ 同意` 按钮回调 → 自动生成工单卡片（依赖真实企微推送）
+- [ ] 实现 `❌ 稍后` 按钮 → 4 小时后再推（依赖真实企微推送）
 - [ ] 实现 `💬 改方案` 文字反馈 → 单轮重生成（SuggestionEngine 已支持 feedback 参数）
 
 ### 双场景验收
@@ -81,7 +85,7 @@
 - [x] Makefile：`install / dev / test / lint / fmt / check / run / scan / clean`
 
 **CLI 入口**：
-- [x] `python -m src.cli --customer X [--today YYYY-MM-DD] [--dry-run]`
+- [x] `python -m src.cli --customer X [--today YYYY-MM-DD] [--dry-run] [--render-cards]`
 - [x] `make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1`
 
 **架构文档**：

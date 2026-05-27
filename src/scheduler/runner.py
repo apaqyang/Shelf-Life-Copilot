@@ -9,9 +9,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.alerts import scan_batch
-from src.models import Alert, Suggestion
+from src.models import Alert, Card, Suggestion
 from src.repository import load_batches, load_customer_config
 from src.suggestion import SuggestionEngine
+from src.wecom import render_card_for_alert
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class ScanResult(BaseModel):
     total_batches: int
     alerts: list[Alert]
     suggestions: list[Suggestion]
+    cards: list[Card] = Field(default_factory=list)
     errors: list[ScanError]
 
 
@@ -77,6 +79,7 @@ class ScanRunner:
 
         alerts: list[Alert] = []
         suggestions: list[Suggestion] = []
+        cards: list[Card] = []
         errors: list[ScanError] = []
 
         for batch in batches:
@@ -91,15 +94,18 @@ class ScanRunner:
             # Per-batch isolation: one bad LLM call must not abort the whole scan.
             try:
                 suggestion = await self._engine.suggest(batch, alert, config)
-                suggestions.append(suggestion)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("LLM suggestion failed for batch %s", batch.batch_id)
                 errors.append(ScanError(batch_id=batch.batch_id, message=str(exc)))
+                continue
+            suggestions.append(suggestion)
+            cards.append(render_card_for_alert(batch, alert, suggestion, config))
 
         return ScanResult(
             customer_id=customer_id,
             total_batches=len(batches),
             alerts=alerts,
             suggestions=suggestions,
+            cards=cards,
             errors=errors,
         )
