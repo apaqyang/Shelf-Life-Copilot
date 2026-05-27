@@ -48,8 +48,8 @@
 - [x] 起草核心建议 Prompt → `src/suggestion/prompt.py`（含改方案分支）
 - [x] Schema 校验 + 越界标签 → 全集 enum + Python 端 `is_standard` 判断（PRD §5.3 越界兜底生效）
 - [x] **LLM Provider 抽象** → AnthropicProvider + MoonshotProvider（OpenAI 协议）
-- [x] **5+ 真实场景合规率验证脚本** → `tools/validate_llm.py` · KIMI 首跑 in-scope 合规率 100%
-- [ ] 重跑验证确认越界兜底 2/2（schema 改造后待复跑）
+- [x] **5+ 真实场景合规率验证脚本** → `tools/validate_llm.py`
+- [x] **真实 LLM 验证（KIMI / moonshot-v1-32k）通过** → 15/15 成功 · in-scope 合规 100% · 越界打标 2/2 · p95 4.1s
 
 ---
 
