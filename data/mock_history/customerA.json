@@ -1,0 +1,172 @@
+[
+  {
+    "batch_id": "A-H01",
+    "customer_id": "customerA",
+    "material_name": "冷冻虾仁",
+    "decided_at": "2026-04-28T07:15:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 8500.0,
+    "actual_savings": 8200.0,
+    "actual_qty": 830.0
+  },
+  {
+    "batch_id": "A-H02",
+    "customer_id": "customerA",
+    "material_name": "冷冻鱼糜",
+    "decided_at": "2026-04-30T07:12:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "approved",
+    "savings_estimate": 6500.0,
+    "actual_savings": 6200.0,
+    "actual_qty": 510.0
+  },
+  {
+    "batch_id": "A-H03",
+    "customer_id": "customerA",
+    "material_name": "冷冻墨鱼",
+    "decided_at": "2026-05-02T07:08:00+00:00",
+    "action": "transfer_warehouse",
+    "outcome": "approved",
+    "savings_estimate": 5400.0,
+    "actual_savings": 5100.0,
+    "actual_qty": 370.0
+  },
+  {
+    "batch_id": "A-H04",
+    "customer_id": "customerA",
+    "material_name": "冷冻虾仁",
+    "decided_at": "2026-05-04T07:11:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 9100.0,
+    "actual_savings": 8900.0,
+    "actual_qty": 910.0
+  },
+  {
+    "batch_id": "A-H05",
+    "customer_id": "customerA",
+    "material_name": "冷冻三文鱼",
+    "decided_at": "2026-05-06T07:15:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "revised",
+    "savings_estimate": 7200.0,
+    "actual_savings": 6900.0,
+    "actual_qty": 460.0,
+    "notes": "改方案 1 次：原建议 transform → 总监要求改 discount_clearance"
+  },
+  {
+    "batch_id": "A-H06",
+    "customer_id": "customerA",
+    "material_name": "虾饺皮",
+    "decided_at": "2026-05-08T07:10:00+00:00",
+    "action": "report_loss",
+    "outcome": "approved",
+    "savings_estimate": 3200.0,
+    "actual_savings": 3200.0,
+    "actual_qty": 180.0,
+    "notes": "已过期 3 天：按报损流程处理，避免食品安全风险"
+  },
+  {
+    "batch_id": "A-H07",
+    "customer_id": "customerA",
+    "material_name": "冷冻鱼糜",
+    "decided_at": "2026-05-10T07:14:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 8800.0,
+    "actual_savings": 8500.0,
+    "actual_qty": 720.0
+  },
+  {
+    "batch_id": "A-H08",
+    "customer_id": "customerA",
+    "material_name": "冷冻虾仁",
+    "decided_at": "2026-05-12T07:09:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 8000.0,
+    "actual_savings": 7800.0,
+    "actual_qty": 780.0
+  },
+  {
+    "batch_id": "A-H09",
+    "customer_id": "customerA",
+    "material_name": "冷冻鲍鱼",
+    "decided_at": "2026-05-14T07:13:00+00:00",
+    "action": "transfer_warehouse",
+    "outcome": "snoozed",
+    "savings_estimate": 12000.0,
+    "actual_savings": null,
+    "actual_qty": null,
+    "notes": "总监延后 4 小时再决定，最终该批次未到临期阈值，下月再评"
+  },
+  {
+    "batch_id": "A-H10",
+    "customer_id": "customerA",
+    "material_name": "冷冻墨鱼",
+    "decided_at": "2026-05-16T07:11:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "approved",
+    "savings_estimate": 5800.0,
+    "actual_savings": 5500.0,
+    "actual_qty": 380.0
+  },
+  {
+    "batch_id": "A-H11",
+    "customer_id": "customerA",
+    "material_name": "冷冻虾仁",
+    "decided_at": "2026-05-18T07:16:00+00:00",
+    "action": "transform",
+    "outcome": "revised",
+    "savings_estimate": 7600.0,
+    "actual_savings": 7300.0,
+    "actual_qty": 750.0,
+    "notes": "改方案 1 次：原建议 discount_clearance → 总监要求改 transform"
+  },
+  {
+    "batch_id": "A-H12",
+    "customer_id": "customerA",
+    "material_name": "冷冻鱼糜",
+    "decided_at": "2026-05-20T07:12:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 7400.0,
+    "actual_savings": 7100.0,
+    "actual_qty": 620.0
+  },
+  {
+    "batch_id": "A-H13",
+    "customer_id": "customerA",
+    "material_name": "冷冻三文鱼",
+    "decided_at": "2026-05-22T07:14:00+00:00",
+    "action": "discount_clearance",
+    "outcome": "rejected",
+    "savings_estimate": 6800.0,
+    "actual_savings": null,
+    "actual_qty": null,
+    "notes": "总监否决：渠道方临时调整价格策略，自行联系大客户消化"
+  },
+  {
+    "batch_id": "A-H14",
+    "customer_id": "customerA",
+    "material_name": "冷冻虾仁",
+    "decided_at": "2026-05-24T07:10:00+00:00",
+    "action": "transform",
+    "outcome": "approved",
+    "savings_estimate": 8300.0,
+    "actual_savings": 8000.0,
+    "actual_qty": 820.0
+  },
+  {
+    "batch_id": "A-H15",
+    "customer_id": "customerA",
+    "material_name": "冷冻墨鱼",
+    "decided_at": "2026-05-26T07:15:00+00:00",
+    "action": "transfer_warehouse",
+    "outcome": "snoozed",
+    "savings_estimate": 4900.0,
+    "actual_savings": null,
+    "actual_qty": null
+  }
+]

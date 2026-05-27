@@ -61,6 +61,7 @@ uv run python -m src.cli --customer customerB --today 2026-05-26 --render-cards 
 ### 1.4 兜底素材（T-10 min）
 
 - [ ] `docs/demo_samples/customerA.md`、`customerB.md` 用 markdown 阅读器 / VSCode 打开预览，全屏可读
+- [ ] `make report` 已重新生成 `docs/demo_samples/monthly_report_customer{A,B}.pdf`，封面金额清晰可读
 - [ ] 备用 2 分钟视频在桌面 / 手机 / U 盘各放一份（见 [FALLBACK_VIDEO.md](FALLBACK_VIDEO.md)）
 - [ ] 卡片里的客户名、品类、年损金额、年批次数 **已替换成对方厂的真实信息**
 

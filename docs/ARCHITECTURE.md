@@ -118,11 +118,15 @@ src/
 │   ├── runner.py               # ScanRunner + ScanResult + ScanError
 │   └── scheduler.py            # DailyScheduler（APScheduler 包装）
 │
-└── wecom/                      # 渲染层 · 4 套卡片 + 推送 client（Protocol）
-    ├── cards.py                # render_alert / render_work_order /
-    │                           #   render_receipt / render_out_of_scope
-    │                           #   + render_card_for_alert (dispatcher)
-    └── client.py               # WecomClient Protocol + DryRunWecomClient
+├── wecom/                      # 渲染层 · 4 套卡片 + 推送 client（Protocol）
+│   ├── cards.py                # render_alert / render_work_order /
+│   │                           #   render_receipt / render_out_of_scope
+│   │                           #   + render_card_for_alert (dispatcher)
+│   └── client.py               # WecomClient Protocol + DryRunWecomClient
+│
+└── reports/                    # 月度 PDF 报告管道（数据 → 渲染分离）
+    ├── aggregator.py           # list[Decision] → MonthlyReportData (纯函数)
+    └── renderer.py             # MonthlyReportData → PDF bytes (reportlab)
 ```
 
 **测试镜像**：`tests/` 与 `src/` 1:1 对应。
@@ -276,7 +280,7 @@ tests/
 | 企微真实推送 | ❌（仅 `DryRunWecomClient`） | v0.5 加 `HttpWecomClient`，订阅 DailyScheduler 的 on_result |
 | 决策日志持久化（Decision 表） | ❌ | SQLite → PostgreSQL |
 | 改方案的多轮对话 | ❌（仅支持单轮） | v0.5 视情况再决定（PRD 决策已锁定单轮） |
-| 月度 PDF 报告 | ❌ | reportlab / weasyprint |
+| 月度 PDF 报告 | ✅ `src/reports/`（reportlab + STSong-Light CID 中文） | 接持久化决策日志驱动数据源 + 定时触发 |
 | 多租户隔离的鉴权 | ❌ | FastAPI 接口层做 JWT |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
 
@@ -318,6 +322,8 @@ tests/
 | 一次性扫描客户 A（dry-run） | `make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1` |
 | 一次性扫描客户 A（含 LLM） | `ANTHROPIC_API_KEY=sk-... make scan CUSTOMER=customerA` |
 | 渲染所有卡片到终端预览 | `ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` |
+| 离线生成 demo 卡片样本 | `make demo` |
+| 生成月度 PDF 报告（mock 数据） | `make report` |
 
 ---
 

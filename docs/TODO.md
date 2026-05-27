@@ -15,6 +15,7 @@
 - ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过）
 - ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
 - ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
+- ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
 - ⏳ **企微真实推送对接**（受阻于客户管理员权限，待 PoC 启动后接入）
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
@@ -127,10 +128,11 @@
 ## 后置任务（v0.5+，留位不展开）
 
 - [ ] 对接客户真实 ERP / WMS（SAP / 用友 / 金蝶 / 自研）
-- [ ] 月度 PDF 报告自动生成（参见 [PRD.md §5.5](PRD.md)）
+- [x] 月度 PDF 报告**生成器**已完成（mock 数据驱动）→ `src/reports/` + `make report`
+- [ ] 月度 PDF 报告**自动定时**（每月 1 号 + 决策日志持久化驱动数据源）
+- [ ] 决策日志持久化（Decision 模型已落地 → 接 SQLite/PostgreSQL）
 - [ ] 多租户配置后台
 - [ ] 私有化部署方案
 - [ ] 跨批次联合优化（v1.5）
-- [ ] 决策日志持久化（Decision 模型 + SQLite/PostgreSQL）
 - [ ] 日志结构化（JSON logging + correlation id）
 - [ ] Prompt caching（评估 5-min TTL 命中率）
