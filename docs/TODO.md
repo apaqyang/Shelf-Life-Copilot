@@ -46,8 +46,10 @@
 
 ### LLM Prompt 工程
 - [x] 起草核心建议 Prompt → `src/suggestion/prompt.py`（含改方案分支）
-- [x] Schema 校验 + 越界标签 → tool_use 动态 enum 限定 + `is_standard` 字段
-- [ ] **跑通 5+ 个真实场景验证合规率 100%** → 需 ANTHROPIC_API_KEY 真实调用（mock 测试已通）
+- [x] Schema 校验 + 越界标签 → 全集 enum + Python 端 `is_standard` 判断（PRD §5.3 越界兜底生效）
+- [x] **LLM Provider 抽象** → AnthropicProvider + MoonshotProvider（OpenAI 协议）
+- [x] **5+ 真实场景合规率验证脚本** → `tools/validate_llm.py` · KIMI 首跑 in-scope 合规率 100%
+- [ ] 重跑验证确认越界兜底 2/2（schema 改造后待复跑）
 
 ---
 

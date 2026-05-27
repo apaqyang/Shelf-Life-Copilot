@@ -11,8 +11,8 @@
 | 层 | 命令 | 何时用 | 依赖 |
 |---|---|---|---|
 | **A. 全链路实战** | `ANTHROPIC_API_KEY=sk-... make scan CUSTOMER=customerA TODAY=2026-05-26` 后续接企微推送 | 网络 + API key + 企微 群 全部就位 | 全部 |
-| **B. LLM 实时 + 终端预览** | `ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` | 企微未就位 / 网络不稳定 | 仅 Anthropic API |
-| **C. 离线兜底** | `make demo` → 打开 `docs/demo_samples/customerA.md` | 断网 / API 故障 | 无 |
+| **B. LLM 实时 + 终端预览** | `ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards`（或 `MOONSHOT_API_KEY=sk-... --provider moonshot`） | 企微未就位 / 网络不稳定 | LLM API（任一 provider） |
+| **C. 离线兜底** | `make demo` → 打开 `docs/demo_samples/customerA.md`；`make report` → PDF | 断网 / API 故障 | 无 |
 
 **核心原则**：现场任何卡顿 ≥ 5 秒，立刻降一层。绝不在客户面前调代码。
 
@@ -40,9 +40,19 @@ ls docs/demo_samples/   # 期望: customerA.md  customerB.md
 ### 1.2 LLM 端到端 smoke（T-20 min）
 
 ```bash
-export ANTHROPIC_API_KEY=sk-...   # 用 demo 专用 key，不要把生产 key 暴露给客户
-uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards | tee /tmp/smoke_A.log
-uv run python -m src.cli --customer customerB --today 2026-05-26 --render-cards | tee /tmp/smoke_B.log
+# 选其一：Anthropic（海外，要梯子）
+export ANTHROPIC_API_KEY=sk-...
+PROVIDER_ARGS=""
+
+# 或 KIMI / Moonshot（国内直连，无需梯子）
+export MOONSHOT_API_KEY=sk-...
+PROVIDER_ARGS="--provider moonshot"
+
+uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards $PROVIDER_ARGS | tee /tmp/smoke_A.log
+uv run python -m src.cli --customer customerB --today 2026-05-26 --render-cards $PROVIDER_ARGS | tee /tmp/smoke_B.log
+
+# 跑过一次合规率验证（建议在 demo 前一天做一次）
+make validate-llm PROVIDER=moonshot   # 或 anthropic
 ```
 
 逐项核对：

@@ -22,6 +22,10 @@
 | [docs/TODO.md](docs/TODO.md) | Week 1-2 任务清单 + 验收标准 |
 | [docs/TECH_SPEC.md](docs/TECH_SPEC.md) | 技术架构、数据模型、接口设计 |
 | [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | 5 分钟现场 Demo 脚本（含 A/B 双场景 + FAQ 8 题） |
+| [docs/RUNBOOK_DEMO.md](docs/RUNBOOK_DEMO.md) | 演前 30 分钟操作 + 三层降级方案 |
+| [docs/FALLBACK_VIDEO.md](docs/FALLBACK_VIDEO.md) | 2 分钟兜底视频分镜脚本 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 模块分层 / 依赖图 / 设计决策记录 |
+| [docs/demo_samples/](docs/demo_samples/) | 现成的卡片 markdown 样本 + 月度 PDF 报告 |
 
 ## 项目结构
 
@@ -41,10 +45,13 @@
 ## 技术栈
 
 - **Runtime**：Python 3.11+ / FastAPI
-- **LLM**：Anthropic Claude（Sonnet 4.6 默认 / Opus 4.7 复杂场景 / Haiku 4.5 改方案）
+- **LLM**（provider 抽象，可热切换）：
+  - Anthropic Claude — Sonnet 4.6 默认 / Opus 4.7 复杂场景 / Haiku 4.5 改方案
+  - Moonshot KIMI — moonshot-v1-32k 默认（OpenAI 协议兼容，国内可访问）
 - **集成**：企业微信群机器人 + 应用消息 API
 - **存储**：SQLite (v0.1) → PostgreSQL (v0.5+)
 - **调度**：APScheduler
+- **报告**：reportlab + STSong-Light CID 中文（月度 PDF）
 
 ## 首批锚定客户
 
@@ -64,17 +71,26 @@
 ## Quick Start（开发者）
 
 ```bash
-# 1. 克隆 + 安装依赖
-uv venv && uv pip install -r requirements.txt
+# 1. 装依赖 + pre-commit
+make dev
 
-# 2. 配置环境变量
-cp .env.example .env  # 填入 ANTHROPIC_API_KEY / WECOM_* 等
+# 2. 配置任一 LLM provider（按需）
+cp .env.example .env
+# 写入 ANTHROPIC_API_KEY 或 MOONSHOT_API_KEY 任一即可
 
-# 3. 启动后端
-uvicorn src.main:app --reload
+# 3. 离线 dry-run（无 API key 也能跑）
+make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1
 
-# 4. 触发一次扫描
-curl -X POST http://localhost:8000/alerts/scan
+# 4. 实际 LLM 调用（任选其一）
+ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --render-cards
+MOONSHOT_API_KEY=sk-... uv run python -m src.cli --customer customerA --provider moonshot --render-cards
+
+# 5. 生成销售弹药（无 LLM）
+make demo           # 离线渲染 demo 卡片到 docs/demo_samples/
+make report         # 生成月度 PDF 报告
+
+# 6. PRD §9.1 真实 LLM 合规率验证
+MOONSHOT_API_KEY=sk-... make validate-llm PROVIDER=moonshot
 ```
 
-详细技术规格见 [docs/TECH_SPEC.md](docs/TECH_SPEC.md)。
+详细技术规格见 [docs/TECH_SPEC.md](docs/TECH_SPEC.md)，运行时操作见 [docs/RUNBOOK_DEMO.md](docs/RUNBOOK_DEMO.md)。

@@ -2,9 +2,10 @@
 
 Usage:
     python -m src.cli --customer customerA [--today 2026-05-26] [--dry-run]
+    python -m src.cli --customer customerA --provider moonshot --model moonshot-v1-32k
 
-`--dry-run` skips LLM calls and prints alerts only — useful when ANTHROPIC_API_KEY
-is not configured, or for quick determinism checks against the mock data.
+`--dry-run` skips LLM calls. Otherwise the configured provider's API key is
+required: ANTHROPIC_API_KEY (default) or MOONSHOT_API_KEY (--provider moonshot).
 """
 
 from __future__ import annotations
@@ -16,11 +17,18 @@ import os
 import sys
 from datetime import date
 
-from anthropic import AsyncAnthropic
-
 from src.scheduler import ScanResult, ScanRunner
-from src.suggestion import SuggestionEngine
+from src.suggestion import (
+    ANTHROPIC_DEFAULT_MODEL,
+    MOONSHOT_DEFAULT_MODEL,
+    LLMProvider,
+    SuggestionEngine,
+    build_anthropic_provider,
+    build_moonshot_provider,
+)
 from src.wecom import DryRunWecomClient
+
+_PROVIDER_CHOICES = ("anthropic", "moonshot")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -49,7 +57,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="After the scan, print each rendered WeCom card markdown to stdout.",
     )
+    parser.add_argument(
+        "--provider",
+        choices=_PROVIDER_CHOICES,
+        default="anthropic",
+        help="LLM provider (default: anthropic). moonshot uses Moonshot/KIMI via OpenAI protocol.",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model id override. Defaults: claude-sonnet-4-6 / moonshot-v1-32k.",
+    )
     return parser.parse_args(argv)
+
+
+def _build_provider(provider_name: str, model: str | None) -> LLMProvider | None:
+    """Return a configured LLMProvider, or None if the required API key is missing."""
+    if provider_name == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print(
+                "ANTHROPIC_API_KEY not set. Pass --dry-run to skip LLM calls, "
+                "or use --provider moonshot with MOONSHOT_API_KEY.",
+                file=sys.stderr,
+            )
+            return None
+        return build_anthropic_provider(api_key, model=model or ANTHROPIC_DEFAULT_MODEL)
+    # moonshot
+    api_key = os.environ.get("MOONSHOT_API_KEY")
+    if not api_key:
+        print(
+            "MOONSHOT_API_KEY not set. Get one from https://platform.moonshot.cn/console/api-keys.",
+            file=sys.stderr,
+        )
+        return None
+    return build_moonshot_provider(api_key, model=model or MOONSHOT_DEFAULT_MODEL)
 
 
 def format_result(result: ScanResult) -> str:
@@ -114,14 +156,10 @@ async def main(argv: list[str] | None = None) -> int:
 
     engine: SuggestionEngine | None = None
     if not args.dry_run:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            print(
-                "ANTHROPIC_API_KEY not set. Pass --dry-run to skip LLM calls.",
-                file=sys.stderr,
-            )
+        provider = _build_provider(args.provider, args.model)
+        if provider is None:
             return 2
-        engine = SuggestionEngine(client=AsyncAnthropic(api_key=api_key))  # pragma: no cover
+        engine = SuggestionEngine(provider=provider)
 
     runner = ScanRunner(engine=engine)
     result = await runner.run_for_customer(

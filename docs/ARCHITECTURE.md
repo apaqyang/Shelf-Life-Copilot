@@ -106,10 +106,11 @@ src/
 ├── alerts/                     # 业务层 · 监测引擎（纯函数，无 IO）
 │   └── monitor.py              # calculate_days_left / classify_severity / scan_batch
 │
-├── suggestion/                 # 业务层 · LLM 建议（async，调 Anthropic）
-│   ├── engine.py               # SuggestionEngine（依赖注入 AsyncAnthropic）
-│   ├── prompt.py               # SYSTEM_PROMPT + build_user_prompt
-│   └── schema.py               # build_suggestion_tool（动态 enum）
+├── suggestion/                 # 业务层 · LLM 建议（async，provider-agnostic）
+│   ├── engine.py               # SuggestionEngine（依赖注入 LLMProvider）
+│   ├── providers.py            # LLMProvider Protocol + Anthropic/Moonshot 实现
+│   ├── prompt.py               # SYSTEM_PROMPT + build_user_prompt（含越界规则）
+│   └── schema.py               # build_suggestion_tool（全集 enum + enabled 首选）
 │
 ├── repository/                 # I/O 层 · JSON 加载
 │   └── loader.py               # load_customer_config / load_batches
@@ -177,11 +178,20 @@ src/
 
 ## 5. 关键设计决策
 
-### 5.1 LLM 输出靠 tool_use 强制 JSON
+### 5.1 LLM 输出靠 tool_use / function calling 强制 JSON
 - 比"prompt 里请求输出 JSON 然后正则提取"可靠 10×
-- `action` 字段的 `enum` **在每次调用时动态生成**，限定到该客户的 `enabled_actions`
-- LLM 在生成阶段就被约束，**不需要后置过滤**
-- 见 `src/suggestion/schema.py` `build_suggestion_tool`
+- `action` 字段的 `enum` **覆盖 ActionType 全集**；description 把 `enabled_actions` 列为首选
+  - 这是 PRD §5.3 越界兜底的实现：LLM 默认走 enabled，但用户反馈明确要求 disabled 时可越界
+  - `is_standard` 由 Python 端 `action in enabled_actions` 判断，越界则路由到红标卡片
+- 见 `src/suggestion/schema.py` `build_suggestion_tool` + `src/suggestion/prompt.py` SYSTEM_PROMPT
+
+### 5.1.1 LLM Provider 抽象（多供应商支持）
+- `src/suggestion/providers.py::LLMProvider` Protocol 定义 `call_with_tool(system, user, tool_schema) → dict`
+- 两个实现：
+  - `AnthropicProvider`：Claude tool_use（默认）
+  - `MoonshotProvider`：Moonshot / KIMI via OpenAI 协议 function calling（国内可访问）
+- CLI 通过 `--provider {anthropic,moonshot}` 切换；engine 完全 vendor-agnostic
+- PRD §9.1 合规率验证脚本 `tools/validate_llm.py` 同时支持两个 provider
 
 ### 5.2 LLM 调用被依赖注入隔离
 - `SuggestionEngine.__init__(client: AsyncAnthropic)` 接受 client 实例
@@ -320,10 +330,12 @@ tests/
 | 跑测试 | `make test` |
 | 启动 FastAPI dev server | `make run` |
 | 一次性扫描客户 A（dry-run） | `make scan CUSTOMER=customerA TODAY=2026-05-26 DRY=1` |
-| 一次性扫描客户 A（含 LLM） | `ANTHROPIC_API_KEY=sk-... make scan CUSTOMER=customerA` |
-| 渲染所有卡片到终端预览 | `ANTHROPIC_API_KEY=sk-... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` |
+| 一次性扫描客户 A（Anthropic） | `ANTHROPIC_API_KEY=sk-... make scan CUSTOMER=customerA` |
+| 一次性扫描客户 A（KIMI/Moonshot） | `MOONSHOT_API_KEY=sk-... uv run python -m src.cli --customer customerA --provider moonshot` |
+| 渲染所有卡片到终端预览 | `... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` |
 | 离线生成 demo 卡片样本 | `make demo` |
 | 生成月度 PDF 报告（mock 数据） | `make report` |
+| PRD §9.1 真实 LLM 合规率验证 | `MOONSHOT_API_KEY=sk-... make validate-llm PROVIDER=moonshot` |
 
 ---
 

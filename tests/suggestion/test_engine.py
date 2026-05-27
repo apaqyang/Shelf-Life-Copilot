@@ -1,18 +1,16 @@
-"""Tests for SuggestionEngine — uses a mocked AsyncAnthropic client, no real HTTP."""
+"""Tests for SuggestionEngine — uses a mocked LLMProvider, no real HTTP."""
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from anthropic import AsyncAnthropic
-from anthropic.types import Message, ToolUseBlock
 from pydantic import ValidationError
 
 from src.models import ActionType, Alert, AlertThresholds, Batch, CustomerConfig, Severity
 from src.suggestion.engine import SuggestionEngine, SuggestionEngineError
+from src.suggestion.providers import LLMProvider, LLMProviderError
 
 
 @pytest.fixture
@@ -56,39 +54,29 @@ def customer() -> CustomerConfig:
     )
 
 
-def _fake_tool_message(
-    action: str = "transform",
-    savings: float = 8500.0,
-    rationale: str = "历史采纳率高，可消化全部库存。",
-    confidence: float = 0.85,
-    extra_text_block: bool = False,
-) -> Message:
-    """Construct a fake anthropic Message containing a tool_use block."""
-    tool_block = MagicMock(spec=ToolUseBlock)
-    tool_block.name = "submit_suggestion"
-    tool_block.input = {
+def _make_provider(
+    payload: dict[str, object] | None = None,
+    *,
+    model_name: str = "claude-sonnet-4-6",
+    raises: Exception | None = None,
+) -> LLMProvider:
+    """Build a MagicMock provider returning either a payload or raising."""
+    provider = MagicMock(spec=LLMProvider)
+    provider.model_name = model_name
+    if raises is not None:
+        provider.call_with_tool = AsyncMock(side_effect=raises)
+    else:
+        provider.call_with_tool = AsyncMock(return_value=payload)
+    return provider
+
+
+def _ok_payload(action: str = "transform") -> dict[str, object]:
+    return {
         "action": action,
-        "savings_estimate": savings,
-        "rationale": rationale,
-        "confidence": confidence,
+        "savings_estimate": 8500.0,
+        "rationale": "历史采纳率高，可消化全部库存。",
+        "confidence": 0.85,
     }
-
-    blocks: list[Any] = []
-    if extra_text_block:
-        text_block = MagicMock()
-        blocks.append(text_block)
-    blocks.append(tool_block)
-
-    message = MagicMock(spec=Message)
-    message.content = blocks
-    return message
-
-
-def _make_engine(message: Message) -> SuggestionEngine:
-    client = AsyncMock(spec=AsyncAnthropic)
-    client.messages = MagicMock()
-    client.messages.create = AsyncMock(return_value=message)
-    return SuggestionEngine(client=client)
 
 
 class TestSuggestionEngineHappyPath:
@@ -96,7 +84,8 @@ class TestSuggestionEngineHappyPath:
     async def test_returns_standard_suggestion_for_enabled_action(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        engine = _make_engine(_fake_tool_message(action="transform"))
+        provider = _make_provider(_ok_payload("transform"))
+        engine = SuggestionEngine(provider=provider)
         suggestion = await engine.suggest(batch, alert, customer)
 
         assert suggestion.action is ActionType.TRANSFORM
@@ -105,16 +94,17 @@ class TestSuggestionEngineHappyPath:
         assert suggestion.confidence == 0.85
         assert suggestion.batch_id == "A-001"
         assert suggestion.customer_id == "customerA"
-        assert suggestion.llm_model.startswith("claude-")
+        assert suggestion.llm_model == "claude-sonnet-4-6"
         assert suggestion.user_feedback is None
 
     @pytest.mark.asyncio
-    async def test_extra_text_blocks_are_ignored(
+    async def test_model_name_taken_from_provider(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        engine = _make_engine(_fake_tool_message(extra_text_block=True))
+        provider = _make_provider(_ok_payload(), model_name="moonshot-v1-32k")
+        engine = SuggestionEngine(provider=provider)
         suggestion = await engine.suggest(batch, alert, customer)
-        assert suggestion.action is ActionType.TRANSFORM
+        assert suggestion.llm_model == "moonshot-v1-32k"
 
 
 class TestSuggestionEngineFeedback:
@@ -122,7 +112,8 @@ class TestSuggestionEngineFeedback:
     async def test_feedback_propagated_to_suggestion(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        engine = _make_engine(_fake_tool_message(action="discount_clearance"))
+        provider = _make_provider(_ok_payload("discount_clearance"))
+        engine = SuggestionEngine(provider=provider)
         suggestion = await engine.suggest(batch, alert, customer, feedback="虾饺线满了")
         assert suggestion.user_feedback == "虾饺线满了"
         assert suggestion.action is ActionType.DISCOUNT_CLEARANCE
@@ -130,51 +121,47 @@ class TestSuggestionEngineFeedback:
 
 class TestSuggestionEngineErrorPaths:
     @pytest.mark.asyncio
-    async def test_missing_tool_block_raises(
+    async def test_provider_error_wrapped(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        empty_message = MagicMock(spec=Message)
-        empty_message.content = []
-        engine = _make_engine(empty_message)
-
-        with pytest.raises(SuggestionEngineError, match="missing tool_use"):
-            await engine.suggest(batch, alert, customer)
-
-    @pytest.mark.asyncio
-    async def test_non_dict_tool_input_raises(
-        self, batch: Batch, alert: Alert, customer: CustomerConfig
-    ) -> None:
-        bad_block = MagicMock(spec=ToolUseBlock)
-        bad_block.name = "submit_suggestion"
-        bad_block.input = "not_a_dict"
-        bad_message = MagicMock(spec=Message)
-        bad_message.content = [bad_block]
-        engine = _make_engine(bad_message)
-
-        with pytest.raises(SuggestionEngineError, match="must be a dict"):
+        provider = _make_provider(raises=LLMProviderError("transport failed"))
+        engine = SuggestionEngine(provider=provider)
+        with pytest.raises(SuggestionEngineError, match="transport failed"):
             await engine.suggest(batch, alert, customer)
 
     @pytest.mark.asyncio
     async def test_payload_validation_propagates(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        bad_payload_message = _fake_tool_message(confidence=1.5)  # invalid
-        engine = _make_engine(bad_payload_message)
+        bad_payload = {**_ok_payload(), "confidence": 1.5}  # invalid
+        provider = _make_provider(bad_payload)
+        engine = SuggestionEngine(provider=provider)
         with pytest.raises(ValidationError):
             await engine.suggest(batch, alert, customer)
 
 
 class TestSuggestionEngineWiring:
     @pytest.mark.asyncio
-    async def test_calls_client_with_expected_tool_choice(
+    async def test_passes_system_user_and_tool_to_provider(
         self, batch: Batch, alert: Alert, customer: CustomerConfig
     ) -> None:
-        engine = _make_engine(_fake_tool_message())
+        provider = _make_provider(_ok_payload())
+        engine = SuggestionEngine(provider=provider)
         await engine.suggest(batch, alert, customer)
 
-        call_args = engine._client.messages.create.await_args  # type: ignore[attr-defined]
-        kwargs = call_args.kwargs
-        assert kwargs["tool_choice"] == {"type": "tool", "name": "submit_suggestion"}
-        assert kwargs["model"].startswith("claude-")
-        assert len(kwargs["tools"]) == 1
-        assert kwargs["tools"][0]["name"] == "submit_suggestion"
+        kwargs = provider.call_with_tool.await_args.kwargs  # type: ignore[union-attr]
+        assert "system_prompt" in kwargs
+        assert "user_prompt" in kwargs
+        assert kwargs["tool_schema"]["name"] == "submit_suggestion"
+        # User prompt must include the actual material name (smoke).
+        assert "冷冻虾仁" in kwargs["user_prompt"]
+        # Tool schema's action enum spans the full action set (PRD §5.3 越界兜底),
+        # while the description steers the model toward the customer-enabled subset.
+        action_prop = kwargs["tool_schema"]["input_schema"]["properties"]["action"]
+        assert "transform" in action_prop["enum"]
+        # employee_canteen is disabled for the fixture customer — but still in enum
+        # so the LLM can pick it when the user's feedback explicitly asks for it.
+        assert "employee_canteen" in action_prop["enum"]
+        # The description must list only enabled actions as "preferred".
+        assert "transform" in action_prop["description"]
+        assert "employee_canteen" not in action_prop["description"]

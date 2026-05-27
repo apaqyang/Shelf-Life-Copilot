@@ -1,7 +1,14 @@
-"""Anthropic tool definition forcing strict JSON output via tool_use.
+"""Tool definition forcing strict JSON output via tool_use / function calling.
 
-The `action` field's `enum` is dynamically restricted to the customer's
-`enabled_actions` — Claude is constrained at generation time, no post-filter needed.
+Schema design (PRD §5.3 越界兜底):
+- `action` enum spans the *full* ActionType set, not just `enabled_actions`.
+- The SYSTEM_PROMPT instructs the model to prefer enabled actions, and only
+  reach for a disabled one when the user's 改方案 feedback explicitly asks for
+  it. `is_standard` is then derived deterministically by Python:
+  `action in customer.enabled_actions`.
+
+This lets the LLM physically emit out-of-scope actions when the user requests
+them, so the "⚠️ 非标准动作 · 需人工复核" red-banner flow can actually fire.
 """
 
 from __future__ import annotations
@@ -14,13 +21,18 @@ TOOL_NAME = "submit_suggestion"
 
 
 def build_suggestion_tool(enabled_actions: list[ActionType]) -> dict[str, Any]:
-    """Build the Anthropic tool spec for one suggestion.
+    """Build the suggestion-tool spec. `enabled_actions` informs the description;
+    the enum itself spans the full ActionType set (see module docstring).
 
     Raises:
-        ValueError: when `enabled_actions` is empty (Claude requires at least one enum value).
+        ValueError: when `enabled_actions` is empty.
     """
     if not enabled_actions:
         raise ValueError("enabled_actions must contain at least one ActionType")
+
+    enabled_values = [a.value for a in enabled_actions]
+    all_values = [a.value for a in ActionType]
+    enabled_str = ", ".join(enabled_values)
 
     return {
         "name": TOOL_NAME,
@@ -33,8 +45,14 @@ def build_suggestion_tool(enabled_actions: list[ActionType]) -> dict[str, Any]:
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": [a.value for a in enabled_actions],
-                    "description": "The chosen disposal action (must be one of the listed enum values).",
+                    "enum": all_values,
+                    "description": (
+                        "The chosen disposal action. STRONGLY PREFER one of the "
+                        f"customer-enabled actions: [{enabled_str}]. Only pick a "
+                        "non-enabled action when the user's 改方案 feedback "
+                        "explicitly asks for it — that case is treated as a "
+                        "non-standard recommendation and routed to human review."
+                    ),
                 },
                 "savings_estimate": {
                     "type": "number",

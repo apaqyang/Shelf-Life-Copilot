@@ -1,4 +1,4 @@
-"""Tests for the Anthropic tool schema builder."""
+"""Tests for the suggestion tool schema builder."""
 
 from __future__ import annotations
 
@@ -15,11 +15,21 @@ class TestBuildSuggestionTool:
         tool = build_suggestion_tool([ActionType.TRANSFORM])
         assert tool["name"] == TOOL_NAME
 
-    def test_action_enum_restricted_to_enabled_actions(self) -> None:
+    def test_action_enum_spans_all_actions(self) -> None:
+        # PRD §5.3 越界兜底：enum 是全集，is_standard 由 Python 判断。
         tool = build_suggestion_tool([ActionType.TRANSFORM, ActionType.REPORT_LOSS])
         properties = cast(dict[str, Any], tool["input_schema"])["properties"]
         action_enum = properties["action"]["enum"]
-        assert action_enum == ["transform", "report_loss"]
+        assert set(action_enum) == {a.value for a in ActionType}
+
+    def test_description_lists_enabled_actions_as_preferred(self) -> None:
+        tool = build_suggestion_tool([ActionType.TRANSFORM, ActionType.REPORT_LOSS])
+        properties = cast(dict[str, Any], tool["input_schema"])["properties"]
+        description = properties["action"]["description"]
+        assert "transform" in description
+        assert "report_loss" in description
+        # The description must steer the model toward enabled actions.
+        assert "PREFER" in description or "prefer" in description.lower()
 
     def test_required_fields_complete(self) -> None:
         tool = build_suggestion_tool([ActionType.TRANSFORM])
