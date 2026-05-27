@@ -6,8 +6,8 @@ from datetime import date
 
 import pytest
 
-from src.cli import format_result, main, parse_args
-from src.models import Alert, Severity, Suggestion
+from src.cli import format_cards, format_result, main, parse_args
+from src.models import Alert, Card, CardKind, Severity, Suggestion
 from src.models.action import ActionType
 from src.scheduler import ScanError, ScanResult
 
@@ -53,6 +53,14 @@ class TestParseArgs:
     def test_dry_run_flag(self) -> None:
         ns = parse_args(["--customer", "customerA", "--dry-run"])
         assert ns.dry_run is True
+
+    def test_render_cards_flag(self) -> None:
+        ns = parse_args(["--customer", "customerA", "--dry-run", "--render-cards"])
+        assert ns.render_cards is True
+
+    def test_render_cards_defaults_off(self) -> None:
+        ns = parse_args(["--customer", "customerA"])
+        assert ns.render_cards is False
 
     def test_missing_customer_exits(self) -> None:
         with pytest.raises(SystemExit):
@@ -122,6 +130,41 @@ class TestFormatResult:
         assert "rate limit" in rendered
 
 
+class TestFormatCards:
+    def test_empty_cards_returns_hint(self) -> None:
+        result = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[],
+            suggestions=[],
+            errors=[],
+        )
+        rendered = format_cards(result)
+        assert "no cards" in rendered
+
+    def test_cards_rendered_with_separators_and_kind(self) -> None:
+        card = Card(
+            kind=CardKind.ALERT,
+            customer_id="customerA",
+            batch_id="A-001",
+            title="【临期预警】冷冻虾仁 · A-001",
+            markdown="## body",
+        )
+        result = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[],
+            suggestions=[],
+            cards=[card],
+            errors=[],
+        )
+        rendered = format_cards(result)
+        assert "Card #1" in rendered
+        assert "alert" in rendered
+        assert "A-001" in rendered
+        assert "## body" in rendered
+
+
 class TestMainDryRun:
     @pytest.mark.asyncio
     async def test_dry_run_succeeds_without_api_key(
@@ -135,6 +178,81 @@ class TestMainDryRun:
         assert exit_code == 0
         assert "customerA" in captured.out
         assert "Alerts:" in captured.out
+
+
+class TestMainRenderCards:
+    @pytest.mark.asyncio
+    async def test_dry_run_with_render_cards_emits_hint(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # dry-run produces no suggestions and therefore no cards — render branch must
+        # still execute cleanly and emit the "no cards" hint.
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--today",
+                "2026-05-26",
+                "--dry-run",
+                "--render-cards",
+            ]
+        )
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "no cards" in captured.out
+
+    @pytest.mark.asyncio
+    async def test_cards_are_sent_to_dry_run_client(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from src import cli as cli_module
+
+        card = Card(
+            kind=CardKind.ALERT,
+            customer_id="customerA",
+            batch_id="A-001",
+            title="【临期预警】冷冻虾仁 · A-001",
+            markdown="## body",
+        )
+        fake_result = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[],
+            suggestions=[],
+            cards=[card],
+            errors=[],
+        )
+
+        class _FakeRunner:
+            def __init__(self, *args: object, **kwargs: object) -> None: ...
+
+            async def run_for_customer(self, *args: object, **kwargs: object) -> ScanResult:
+                return fake_result
+
+        monkeypatch.setattr(cli_module, "ScanRunner", _FakeRunner)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
+        # Avoid constructing a real AsyncAnthropic in main()
+        monkeypatch.setattr(
+            cli_module,
+            "SuggestionEngine",
+            lambda client: AsyncMock(spec=cli_module.SuggestionEngine),
+        )
+        monkeypatch.setattr(cli_module, "AsyncAnthropic", lambda api_key: object())
+
+        exit_code = await main(
+            ["--customer", "customerA", "--today", "2026-05-26", "--render-cards"]
+        )
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "Card #1" in captured.out
+        assert "## body" in captured.out
 
 
 class TestMainMissingApiKey:

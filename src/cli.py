@@ -20,6 +20,7 @@ from anthropic import AsyncAnthropic
 
 from src.scheduler import ScanResult, ScanRunner
 from src.suggestion import SuggestionEngine
+from src.wecom import DryRunWecomClient
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -42,6 +43,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Skip LLM calls and print alerts only (no API key required).",
+    )
+    parser.add_argument(
+        "--render-cards",
+        action="store_true",
+        help="After the scan, print each rendered WeCom card markdown to stdout.",
     )
     return parser.parse_args(argv)
 
@@ -88,6 +94,17 @@ def format_result(result: ScanResult) -> str:
     return "\n".join(lines)
 
 
+def format_cards(result: ScanResult) -> str:
+    """Render every Card in a ScanResult as separator-delimited blocks."""
+    if not result.cards:
+        return "(no cards — pass without --dry-run to generate suggestions)"
+    blocks = ["=== Rendered cards ==="]
+    for i, card in enumerate(result.cards, start=1):
+        blocks.append(f"\n--- Card #{i} · {card.kind.value} · {card.title} ---")
+        blocks.append(card.markdown)
+    return "\n".join(blocks)
+
+
 async def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -113,6 +130,16 @@ async def main(argv: list[str] | None = None) -> int:
         skip_llm=args.dry_run,
     )
     print(format_result(result))
+
+    if args.render_cards:
+        # Dry-run push to a no-op WeCom client — exercises the send_card surface
+        # so we can validate the wiring offline (real client lands in v0.5).
+        client = DryRunWecomClient()
+        for card in result.cards:
+            await client.send_card(card)
+        print()
+        print(format_cards(result))
+
     return 0
 
 
