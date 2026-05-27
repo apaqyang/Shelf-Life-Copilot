@@ -121,4 +121,13 @@ class TestBuildUserPrompt:
         )
         assert "用户反馈" in prompt
         assert "虾饺线满了" in prompt
-        assert "语义最接近" in prompt
+        # Out-of-scope routing instruction must be explicit.
+        assert "用户特别要求" in prompt or "非标准动作" in prompt
+
+
+class TestSystemPromptOutOfScopeRule:
+    def test_system_prompt_describes_disabled_action_override(self) -> None:
+        # PRD §5.3: the LLM is allowed to pick disabled actions only when the user
+        # explicitly asks. The system prompt must say so.
+        assert "用户特别要求" in SYSTEM_PROMPT
+        assert "非标准" in SYSTEM_PROMPT

@@ -6,10 +6,11 @@ from datetime import date
 
 import pytest
 
-from src.cli import format_cards, format_result, main, parse_args
+from src.cli import _build_provider, format_cards, format_result, main, parse_args
 from src.models import Alert, Card, CardKind, Severity, Suggestion
 from src.models.action import ActionType
 from src.scheduler import ScanError, ScanResult
+from src.suggestion import AnthropicProvider, MoonshotProvider
 
 
 def _alert(batch_id: str, severity: Severity, days_left: int) -> Alert:
@@ -238,13 +239,17 @@ class TestMainRenderCards:
 
         monkeypatch.setattr(cli_module, "ScanRunner", _FakeRunner)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
-        # Avoid constructing a real AsyncAnthropic in main()
+        # Avoid constructing real provider HTTP clients in main().
+        monkeypatch.setattr(
+            cli_module,
+            "_build_provider",
+            lambda provider_name, model: object(),
+        )
         monkeypatch.setattr(
             cli_module,
             "SuggestionEngine",
-            lambda client: AsyncMock(spec=cli_module.SuggestionEngine),
+            lambda provider: AsyncMock(spec=cli_module.SuggestionEngine),
         )
-        monkeypatch.setattr(cli_module, "AsyncAnthropic", lambda api_key: object())
 
         exit_code = await main(
             ["--customer", "customerA", "--today", "2026-05-26", "--render-cards"]
@@ -253,6 +258,48 @@ class TestMainRenderCards:
         assert exit_code == 0
         assert "Card #1" in captured.out
         assert "## body" in captured.out
+
+
+class TestBuildProvider:
+    def test_anthropic_returns_provider_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        provider = _build_provider("anthropic", None)
+        assert isinstance(provider, AnthropicProvider)
+        assert provider.model_name == "claude-sonnet-4-6"
+
+    def test_anthropic_respects_model_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        provider = _build_provider("anthropic", "claude-opus-4-7")
+        assert isinstance(provider, AnthropicProvider)
+        assert provider.model_name == "claude-opus-4-7"
+
+    def test_anthropic_returns_none_without_key(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        result = _build_provider("anthropic", None)
+        assert result is None
+        assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+
+    def test_moonshot_returns_provider_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MOONSHOT_API_KEY", "sk-test")
+        provider = _build_provider("moonshot", None)
+        assert isinstance(provider, MoonshotProvider)
+        assert provider.model_name == "moonshot-v1-32k"
+
+    def test_moonshot_respects_model_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("MOONSHOT_API_KEY", "sk-test")
+        provider = _build_provider("moonshot", "kimi-latest")
+        assert isinstance(provider, MoonshotProvider)
+        assert provider.model_name == "kimi-latest"
+
+    def test_moonshot_returns_none_without_key(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        result = _build_provider("moonshot", None)
+        assert result is None
+        assert "MOONSHOT_API_KEY" in capsys.readouterr().err
 
 
 class TestMainMissingApiKey:
