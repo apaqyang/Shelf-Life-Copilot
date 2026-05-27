@@ -122,14 +122,16 @@ def render_card_for_alert(
 def render_work_order_card(
     batch: Batch,
     suggestion: Suggestion,
+    customer: CustomerConfig,
     foreman_userids: list[str],
     due_date: date,
 ) -> Card:
     """Issued after ✅ 同意 — @s the workshop lead and asks for completion ack."""
+    phrase = _action_phrase(suggestion.action, customer)
     body = (
         f"## 📋 【工单】{batch.batch_id}\n"
         f"**物料**：{batch.material_name}\n"
-        f"**处置动作**：{suggestion.rationale}\n"
+        f"**处置动作**：{phrase}\n"
         f"**数量**：{batch.stock_qty:,.0f} {batch.unit}\n"
         f"**截止日期**：{due_date.isoformat()}\n"
         f"\n"

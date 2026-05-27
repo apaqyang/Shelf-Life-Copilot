@@ -235,22 +235,26 @@ class TestRenderCardForAlert:
 
 
 class TestRenderWorkOrderCard:
-    def test_kind_and_mentions(self, batch: Batch, standard_suggestion: Suggestion) -> None:
+    def test_kind_and_mentions(
+        self, batch: Batch, standard_suggestion: Suggestion, customer: CustomerConfig
+    ) -> None:
         card = render_work_order_card(
             batch,
             standard_suggestion,
+            customer,
             foreman_userids=["wecom_userid_workshop_lead"],
             due_date=date(2026, 5, 29),
         )
         assert card.kind is CardKind.WORK_ORDER
         assert card.mentioned_userids == ["wecom_userid_workshop_lead"]
 
-    def test_markdown_contains_action_and_due_date(
-        self, batch: Batch, standard_suggestion: Suggestion
+    def test_markdown_contains_phrase_and_due_date(
+        self, batch: Batch, standard_suggestion: Suggestion, customer: CustomerConfig
     ) -> None:
         card = render_work_order_card(
             batch,
             standard_suggestion,
+            customer,
             foreman_userids=["wecom_userid_workshop_lead"],
             due_date=date(2026, 5, 29),
         )
@@ -260,11 +264,17 @@ class TestRenderWorkOrderCard:
         assert "850" in md
         assert "2026-05-29" in md
         assert "已完成" in md  # completion button label
+        # 处置动作 must show the industry phrase, not raw enum or rationale.
+        assert "转加工为虾饺馅" in md
+        assert "transform" not in md
 
-    def test_has_completion_button(self, batch: Batch, standard_suggestion: Suggestion) -> None:
+    def test_has_completion_button(
+        self, batch: Batch, standard_suggestion: Suggestion, customer: CustomerConfig
+    ) -> None:
         card = render_work_order_card(
             batch,
             standard_suggestion,
+            customer,
             foreman_userids=["wecom_userid_workshop_lead"],
             due_date=date(2026, 5, 29),
         )
