@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint fmt check run scan clean
+.PHONY: help install dev test lint fmt check run scan demo clean
 
 help: ## 显示所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -33,6 +33,9 @@ scan: ## 跑一次扫描，用法 make scan CUSTOMER=customerA [TODAY=2026-05-26
 		--customer $(CUSTOMER) \
 		$(if $(TODAY),--today $(TODAY),) \
 		$(if $(DRY),--dry-run,)
+
+demo: ## 离线渲染 demo 卡片到 docs/demo_samples/ (彩排 + 兜底用)
+	@uv run python tools/render_demo_cards.py
 
 clean: ## 清理缓存与覆盖率产物
 	find . -type d -name '__pycache__' -exec rm -rf {} +

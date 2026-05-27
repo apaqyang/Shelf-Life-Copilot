@@ -14,8 +14,9 @@
 - ✅ **LLM 建议生成器**：`src/suggestion/`（Claude tool_use 强制 JSON）
 - ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过）
 - ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
+- ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
 - ⏳ **企微真实推送对接**（受阻于客户管理员权限，待 PoC 启动后接入）
-- ⏳ **Demo 现场彩排**（Week 2 剩余）
+- ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
 **当前指标**：144 测试 passed · 覆盖率 100% · 10+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
@@ -68,10 +69,14 @@
 
 ### Demo 现场准备
 - [x] 内部 Demo 演讲稿成稿 → [DEMO_SCRIPT.md](DEMO_SCRIPT.md)
-- [ ] Demo 演讲稿内部彩排 ≥ 2 次
-- [ ] **Demo 失败兜底视频**录制（2 分钟）
-- [ ] FAQ 8 题熟记 + 现场角色分工确定
-- [ ] 现场设备清单核对（手机 + 电脑 + 4G 热点 + 镜像线）
+- [x] 演前 30 分钟操作 runbook → [RUNBOOK_DEMO.md](RUNBOOK_DEMO.md)
+- [x] 离线兜底卡片样本 → `make demo` → `docs/demo_samples/customer{A,B}.md`
+- [x] 兜底视频分镜脚本 → [FALLBACK_VIDEO.md](FALLBACK_VIDEO.md)（待真人录制）
+- [ ] Demo 演讲稿内部彩排 ≥ 2 次（需主讲 + 见证者）
+- [ ] **Demo 失败兜底视频**实际录制（2 分钟，按分镜脚本）
+- [x] FAQ 8 题熟记 → DEMO_SCRIPT §FAQ
+- [ ] 现场角色分工确定（主讲 / 技术 / 见证）
+- [x] 现场设备清单 → RUNBOOK_DEMO §1.5
 
 ---
 
