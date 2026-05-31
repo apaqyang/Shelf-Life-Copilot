@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint fmt check run scan demo report validate-llm clean
+.PHONY: help install dev test lint fmt check run scan demo report validate-llm push clean
 
 help: ## 显示所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -42,6 +42,14 @@ report: ## 生成月度 PDF 报告到 docs/demo_samples/monthly_report_<customer
 
 validate-llm: ## 真实 LLM 5+ 场景合规率验证 (用法 PROVIDER=moonshot)
 	@uv run python tools/validate_llm.py --provider $(or $(PROVIDER),anthropic)
+
+push: ## 真推卡片到企微群 (用法 make push CUSTOMER=customerA [TODAY=2026-05-26] [PROVIDER=moonshot]，需先 export WECOM_WEBHOOK_URL)
+	@test -n "$$WECOM_WEBHOOK_URL" || (echo "ERROR: 先 export WECOM_WEBHOOK_URL=<群机器人 URL>"; exit 1)
+	@uv run python -m src.cli \
+		--customer $(CUSTOMER) \
+		$(if $(TODAY),--today $(TODAY),) \
+		--provider $(or $(PROVIDER),moonshot) \
+		--push-webhook "$$WECOM_WEBHOOK_URL"
 
 clean: ## 清理缓存与覆盖率产物
 	find . -type d -name '__pycache__' -exec rm -rf {} +

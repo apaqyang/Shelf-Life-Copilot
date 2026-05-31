@@ -13,11 +13,13 @@ from src.wecom.cards import (
     render_receipt_card,
     render_work_order_card,
 )
-from src.wecom.client import DryRunWecomClient, WecomClient
+from src.wecom.client import DryRunWecomClient, WebhookWecomClient, WecomClient, WecomPushError
 
 __all__ = [
     "DryRunWecomClient",
+    "WebhookWecomClient",
     "WecomClient",
+    "WecomPushError",
     "render_alert_card",
     "render_card_for_alert",
     "render_out_of_scope_card",

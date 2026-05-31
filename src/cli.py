@@ -32,7 +32,7 @@ from src.suggestion import (
     build_anthropic_provider,
     build_moonshot_provider,
 )
-from src.wecom import DryRunWecomClient
+from src.wecom import DryRunWecomClient, WebhookWecomClient, WecomClient
 
 _PROVIDER_CHOICES = ("anthropic", "moonshot")
 
@@ -84,7 +84,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help='Operator feedback for --revise-batch, e.g. "改成打折清仓".',
     )
+    parser.add_argument(
+        "--push-webhook",
+        default=None,
+        help=(
+            "WeCom group-bot webhook URL to push cards to. "
+            "Falls back to env WECOM_WEBHOOK_URL when omitted. "
+            "Without either, cards stay in-memory (DryRunWecomClient)."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def _build_wecom_client(webhook_url: str | None) -> WecomClient:
+    """Pick the WeCom transport: real webhook when a URL is configured, else DryRun.
+
+    Resolution order: explicit CLI flag → WECOM_WEBHOOK_URL env → DryRun.
+    """
+    url = webhook_url or os.environ.get("WECOM_WEBHOOK_URL")
+    if url:
+        return WebhookWecomClient(url)
+    return DryRunWecomClient()
 
 
 def _build_provider(provider_name: str, model: str | None) -> LLMProvider | None:
@@ -194,7 +214,11 @@ async def main(argv: list[str] | None = None) -> int:
             today=args.today,
         )
         print(format_result(result))
-        # Revise is always card-centric — print the rendered card without an extra flag.
+        # Revise is always card-centric — push to whichever client is configured
+        # (DryRun when no webhook, real WeCom group bot otherwise) and echo the markdown.
+        client = _build_wecom_client(args.push_webhook)
+        for card in result.cards:
+            await client.send_card(card)
         print()
         print(format_cards(result))
         return 0
@@ -206,14 +230,15 @@ async def main(argv: list[str] | None = None) -> int:
     )
     print(format_result(result))
 
-    if args.render_cards:
-        # Dry-run push to a no-op WeCom client — exercises the send_card surface
-        # so we can validate the wiring offline (real client lands in v0.5).
-        client = DryRunWecomClient()
+    # Push cards when either flag asks for it: --render-cards (echo) or --push-webhook
+    # (real push). Resolves to DryRun when neither is wired, mirroring prior behavior.
+    if args.render_cards or args.push_webhook or os.environ.get("WECOM_WEBHOOK_URL"):
+        client = _build_wecom_client(args.push_webhook)
         for card in result.cards:
             await client.send_card(card)
-        print()
-        print(format_cards(result))
+        if args.render_cards:
+            print()
+            print(format_cards(result))
 
     return 0
 
