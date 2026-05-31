@@ -3,9 +3,15 @@
 Usage:
     python -m src.cli --customer customerA [--today 2026-05-26] [--dry-run]
     python -m src.cli --customer customerA --provider moonshot --model moonshot-v1-32k
+    python -m src.cli --customer customerA --revise-batch A-001 \\
+        --feedback "虾饺线满了，能不能改成打折清仓"
 
 `--dry-run` skips LLM calls. Otherwise the configured provider's API key is
 required: ANTHROPIC_API_KEY (default) or MOONSHOT_API_KEY (--provider moonshot).
+
+`--revise-batch BATCH_ID --feedback "..."` re-runs the LLM for a single batch
+with operator feedback (PRD §5.3 改方案). Out-of-scope suggestions still come
+back as the red-stamped card — the guard-rail is visible by design.
 """
 
 from __future__ import annotations
@@ -67,6 +73,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model",
         default=None,
         help="Model id override. Defaults: claude-sonnet-4-6 / moonshot-v1-32k.",
+    )
+    parser.add_argument(
+        "--revise-batch",
+        default=None,
+        help="Run single-batch revise for this batch id (requires --feedback).",
+    )
+    parser.add_argument(
+        "--feedback",
+        default=None,
+        help='Operator feedback for --revise-batch, e.g. "改成打折清仓".',
     )
     return parser.parse_args(argv)
 
@@ -154,6 +170,13 @@ async def main(argv: list[str] | None = None) -> int:
     )
     args = parse_args(argv)
 
+    if args.revise_batch is not None and args.feedback is None:
+        print("--revise-batch requires --feedback to be set.", file=sys.stderr)
+        return 2
+    if args.revise_batch is not None and args.dry_run:
+        print("--revise-batch needs an LLM call; cannot combine with --dry-run.", file=sys.stderr)
+        return 2
+
     engine: SuggestionEngine | None = None
     if not args.dry_run:
         provider = _build_provider(args.provider, args.model)
@@ -162,6 +185,20 @@ async def main(argv: list[str] | None = None) -> int:
         engine = SuggestionEngine(provider=provider)
 
     runner = ScanRunner(engine=engine)
+
+    if args.revise_batch is not None:
+        result = await runner.revise_for_batch(
+            args.customer,
+            batch_id=args.revise_batch,
+            feedback=args.feedback,
+            today=args.today,
+        )
+        print(format_result(result))
+        # Revise is always card-centric — print the rendered card without an extra flag.
+        print()
+        print(format_cards(result))
+        return 0
+
     result = await runner.run_for_customer(
         args.customer,
         today=args.today,

@@ -260,6 +260,146 @@ class TestMainRenderCards:
         assert "## body" in captured.out
 
 
+class TestReviseFlagParsing:
+    def test_revise_batch_and_feedback_parsed(self) -> None:
+        ns = parse_args(
+            [
+                "--customer",
+                "customerA",
+                "--revise-batch",
+                "A-001",
+                "--feedback",
+                "虾饺线满了，能不能改成打折清仓",
+            ]
+        )
+        assert ns.revise_batch == "A-001"
+        assert ns.feedback == "虾饺线满了，能不能改成打折清仓"
+
+    def test_revise_defaults_none(self) -> None:
+        ns = parse_args(["--customer", "customerA"])
+        assert ns.revise_batch is None
+        assert ns.feedback is None
+
+
+class TestMainReviseFlow:
+    @pytest.mark.asyncio
+    async def test_revise_calls_revise_for_batch_and_prints_card(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from src import cli as cli_module
+
+        captured: dict[str, object] = {}
+
+        card = Card(
+            kind=CardKind.ALERT,
+            customer_id="customerA",
+            batch_id="A-001",
+            title="【临期预警】冷冻虾仁 · A-001",
+            markdown="## body discount_clearance",
+        )
+        suggestion = _suggestion("A-001", action=ActionType.DISCOUNT_CLEARANCE)
+        fake_result = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[_alert("A-001", Severity.YELLOW, 19)],
+            suggestions=[suggestion],
+            cards=[card],
+            errors=[],
+        )
+
+        class _FakeRunner:
+            def __init__(self, *args: object, **kwargs: object) -> None: ...
+
+            async def revise_for_batch(
+                self,
+                customer_id: str,
+                batch_id: str,
+                feedback: str,
+                today: object = None,
+            ) -> ScanResult:
+                captured["customer_id"] = customer_id
+                captured["batch_id"] = batch_id
+                captured["feedback"] = feedback
+                return fake_result
+
+            async def run_for_customer(self, *args: object, **kwargs: object) -> ScanResult:
+                raise AssertionError("revise flow must not call run_for_customer")
+
+        monkeypatch.setattr(cli_module, "ScanRunner", _FakeRunner)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
+        monkeypatch.setattr(
+            cli_module,
+            "_build_provider",
+            lambda provider_name, model: object(),
+        )
+        monkeypatch.setattr(
+            cli_module,
+            "SuggestionEngine",
+            lambda provider: AsyncMock(spec=cli_module.SuggestionEngine),
+        )
+
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--today",
+                "2026-05-26",
+                "--revise-batch",
+                "A-001",
+                "--feedback",
+                "虾饺线满了，能不能改成打折清仓",
+            ]
+        )
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert captured == {
+            "customer_id": "customerA",
+            "batch_id": "A-001",
+            "feedback": "虾饺线满了，能不能改成打折清仓",
+        }
+        # Revise prints the revised card without needing --render-cards.
+        assert "discount_clearance" in out
+        assert "## body discount_clearance" in out
+
+    @pytest.mark.asyncio
+    async def test_revise_requires_feedback(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        exit_code = await main(["--customer", "customerA", "--revise-batch", "A-001"])
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "--feedback" in err
+
+    @pytest.mark.asyncio
+    async def test_revise_rejects_dry_run(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--revise-batch",
+                "A-001",
+                "--feedback",
+                "改成打折",
+                "--dry-run",
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "dry-run" in err.lower()
+
+
 class TestBuildProvider:
     def test_anthropic_returns_provider_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")

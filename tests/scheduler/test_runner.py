@@ -152,6 +152,150 @@ class TestScanResultModel:
             result.customer_id = "customerB"  # type: ignore[misc]
 
 
+class TestScanRunnerReviseForBatch:
+    """revise_for_batch — single-batch path used by `--revise-batch` CLI flag.
+
+    Drives DEMO_SCRIPT '改方案' moment: presenter picks one batch, types a
+    feedback line, and we re-call the LLM with that feedback. Out-of-scope
+    feedback must still land (red-stamped) rather than silently fail — the
+    point of demo is to show the guard-rail working, not to hide it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_passes_feedback_to_engine_and_returns_single_card(self) -> None:
+        engine = AsyncMock(spec=SuggestionEngine)
+        captured: dict[str, object] = {}
+
+        async def _suggest(
+            batch: Batch, alert: Alert, customer: CustomerConfig, feedback: str | None = None
+        ) -> Suggestion:
+            captured["batch_id"] = batch.batch_id
+            captured["feedback"] = feedback
+            return Suggestion(
+                batch_id=batch.batch_id,
+                customer_id=customer.customer_id,
+                action=ActionType.DISCOUNT_CLEARANCE,
+                savings_estimate=6200.0,
+                rationale="清仓渠道吸收率 75%",
+                confidence=0.78,
+                is_standard=True,
+                llm_model="claude-sonnet-4-6",
+                user_feedback=feedback,
+            )
+
+        engine.suggest = AsyncMock(side_effect=_suggest)
+        runner = ScanRunner(engine=engine)
+
+        result = await runner.revise_for_batch(
+            "customerA",
+            batch_id="A-001",
+            feedback="虾饺线满了，能不能改成打折清仓",
+            today=date(2026, 5, 26),
+        )
+
+        assert captured["batch_id"] == "A-001"
+        assert captured["feedback"] == "虾饺线满了，能不能改成打折清仓"
+        assert result.customer_id == "customerA"
+        assert result.total_batches == 1
+        assert len(result.alerts) == 1
+        assert len(result.suggestions) == 1
+        assert len(result.cards) == 1
+        assert result.errors == []
+        assert result.suggestions[0].user_feedback == "虾饺线满了，能不能改成打折清仓"
+        assert result.cards[0].is_standard
+
+    @pytest.mark.asyncio
+    async def test_out_of_scope_revise_lands_as_red_stamped_card(self) -> None:
+        from src.models.card import CardKind
+
+        engine = AsyncMock(spec=SuggestionEngine)
+
+        async def _suggest(
+            batch: Batch, alert: Alert, customer: CustomerConfig, feedback: str | None = None
+        ) -> Suggestion:
+            # employee_canteen is disabled for customerA → LLM returns it anyway
+            return Suggestion(
+                batch_id=batch.batch_id,
+                customer_id=customer.customer_id,
+                action=ActionType.EMPLOYEE_CANTEEN,
+                savings_estimate=1500.0,
+                rationale="员工食堂内部消化",
+                confidence=0.55,
+                is_standard=False,
+                llm_model="claude-haiku-4-5",
+                user_feedback=feedback,
+            )
+
+        engine.suggest = AsyncMock(side_effect=_suggest)
+        runner = ScanRunner(engine=engine)
+
+        result = await runner.revise_for_batch(
+            "customerA",
+            batch_id="A-001",
+            feedback="送给关联食堂内部消化掉",
+            today=date(2026, 5, 26),
+        )
+
+        assert len(result.cards) == 1
+        assert result.cards[0].kind is CardKind.OUT_OF_SCOPE
+        assert not result.cards[0].is_standard
+
+    @pytest.mark.asyncio
+    async def test_unknown_batch_id_raises(self, mock_engine: AsyncMock) -> None:
+        runner = ScanRunner(engine=mock_engine)
+        with pytest.raises(KeyError, match="A-DOES-NOT-EXIST"):
+            await runner.revise_for_batch(
+                "customerA",
+                batch_id="A-DOES-NOT-EXIST",
+                feedback="任意",
+                today=date(2026, 5, 26),
+            )
+
+    @pytest.mark.asyncio
+    async def test_healthy_batch_returns_empty_alerts(self, mock_engine: AsyncMock) -> None:
+        # A-004 (鲍鱼) 60d 远超阈值 → 健康，无 alert，应当不调 LLM
+        runner = ScanRunner(engine=mock_engine)
+        result = await runner.revise_for_batch(
+            "customerA",
+            batch_id="A-004",
+            feedback="任意",
+            today=date(2026, 5, 26),
+        )
+        assert result.total_batches == 1
+        assert result.alerts == []
+        assert result.suggestions == []
+        assert result.cards == []
+        mock_engine.suggest.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_recorded_as_error(self) -> None:
+        engine = AsyncMock(spec=SuggestionEngine)
+        engine.suggest = AsyncMock(side_effect=SuggestionEngineError("simulated"))
+        runner = ScanRunner(engine=engine)
+
+        result = await runner.revise_for_batch(
+            "customerA",
+            batch_id="A-001",
+            feedback="任意",
+            today=date(2026, 5, 26),
+        )
+        assert result.suggestions == []
+        assert result.cards == []
+        assert len(result.errors) == 1
+        assert result.errors[0].batch_id == "A-001"
+
+    @pytest.mark.asyncio
+    async def test_engine_none_raises(self) -> None:
+        runner = ScanRunner(engine=None)
+        with pytest.raises(ValueError, match="engine is required"):
+            await runner.revise_for_batch(
+                "customerA",
+                batch_id="A-001",
+                feedback="任意",
+                today=date(2026, 5, 26),
+            )
+
+
 class TestScanRunnerCardRendering:
     """ScanRunner renders a Card per successful suggestion."""
 

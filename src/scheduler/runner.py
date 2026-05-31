@@ -109,3 +109,56 @@ class ScanRunner:
             cards=cards,
             errors=errors,
         )
+
+    async def revise_for_batch(
+        self,
+        customer_id: str,
+        batch_id: str,
+        feedback: str,
+        today: date | None = None,
+    ) -> ScanResult:
+        """Re-run suggestion for one batch with operator feedback (PRD §5.3 改方案).
+
+        Mirrors run_for_customer but scoped to a single batch. Out-of-scope
+        suggestions still come back rendered (as the red-stamped card) so the
+        demo's guard-rail is visible rather than swallowed.
+
+        Raises:
+            ValueError: engine not injected.
+            KeyError: batch_id not found in the customer's mock data.
+        """
+        if self._engine is None:
+            raise ValueError("engine is required for revise_for_batch")
+
+        config = load_customer_config(customer_id, root=self._data_root)
+        batches = load_batches(customer_id, root=self._data_root)
+
+        batch = next((b for b in batches if b.batch_id == batch_id), None)
+        if batch is None:
+            raise KeyError(batch_id)
+
+        alerts: list[Alert] = []
+        suggestions: list[Suggestion] = []
+        cards: list[Card] = []
+        errors: list[ScanError] = []
+
+        alert = scan_batch(batch, config.alert_thresholds, today=today)
+        if alert is not None:
+            alerts.append(alert)
+            try:
+                suggestion = await self._engine.suggest(batch, alert, config, feedback=feedback)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("LLM revise failed for batch %s", batch.batch_id)
+                errors.append(ScanError(batch_id=batch.batch_id, message=str(exc)))
+            else:
+                suggestions.append(suggestion)
+                cards.append(render_card_for_alert(batch, alert, suggestion, config))
+
+        return ScanResult(
+            customer_id=customer_id,
+            total_batches=1,
+            alerts=alerts,
+            suggestions=suggestions,
+            cards=cards,
+            errors=errors,
+        )

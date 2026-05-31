@@ -6,20 +6,21 @@
 
 ---
 
-## 进度概览（更新于 2026-05-27）
+## 进度概览（更新于 2026-05-31）
 
 - ✅ **工程基础设施**：pyproject / ruff / mypy strict / pytest / GitHub Actions CI / pre-commit
 - ✅ **数据层**：models + repository + Mock 数据（A:7 批次 / B:6 批次）
 - ✅ **监测引擎**：`src/alerts/`（per-customer 阈值）
 - ✅ **LLM 建议生成器**：`src/suggestion/`（Claude tool_use 强制 JSON）
-- ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过）
+- ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过；改方案入口已暴露）
 - ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
+- ✅ **改方案单轮重生成**：`ScanRunner.revise_for_batch` + CLI `--revise-batch / --feedback`（越界自动红标）
 - ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
 - ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
 - ⏳ **企微真实推送对接**（受阻于客户管理员权限，待 PoC 启动后接入）
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：144 测试 passed · 覆盖率 100% · 10+ commits · CI 全绿
+**当前指标**：205 测试 passed · 覆盖率 100% · 11+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
@@ -62,13 +63,13 @@
 - [x] CLI `--render-cards` 离线预览 markdown
 - [ ] 实现 `✅ 同意` 按钮回调 → 自动生成工单卡片（依赖真实企微推送）
 - [ ] 实现 `❌ 稍后` 按钮 → 4 小时后再推（依赖真实企微推送）
-- [ ] 实现 `💬 改方案` 文字反馈 → 单轮重生成（SuggestionEngine 已支持 feedback 参数）
+- [x] 实现 `💬 改方案` 文字反馈 → 单轮重生成 → `ScanRunner.revise_for_batch` + CLI `--revise-batch / --feedback`（越界自动走红标卡）
 
 ### 双场景验收
 - [ ] 客户 A：3 张卡片跑通（虾仁 / 鱼糜 / 越界改方案）
 - [ ] 客户 B：3 张卡片跑通（盒饭馅料 / 调理品 / 越界改方案）
 - [ ] 工单回执流程跑通（车间主任 "已完成" 回执）
-- [ ] 改方案单轮重生成跑通，含越界场景红标
+- [x] 改方案单轮重生成跑通，含越界场景红标（CLI + ScanRunner + KIMI 验证脚本三重覆盖）
 
 ### Demo 现场准备
 - [x] 内部 Demo 演讲稿成稿 → [DEMO_SCRIPT.md](DEMO_SCRIPT.md)
