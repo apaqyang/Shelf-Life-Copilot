@@ -15,12 +15,13 @@
 - ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过；改方案入口已暴露）
 - ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
 - ✅ **改方案单轮重生成**：`ScanRunner.revise_for_batch` + CLI `--revise-batch / --feedback`（越界自动红标）
+- ✅ **企微真实推送 · 路径 A（群机器人 webhook）**：`WebhookWecomClient` + CLI `--push-webhook` + `make push`（自测路径，群主权限即可）
 - ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
 - ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
-- ⏳ **企微真实推送对接**（受阻于客户管理员权限，待 PoC 启动后接入）
+- ⏳ **企微真实推送 · 路径 B（自建应用 + 回调）**：按钮交互回调，需客户管理员权限 + 公网域名，待 PoC 启动
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：205 测试 passed · 覆盖率 100% · 11+ commits · CI 全绿
+**当前指标**：222 测试 passed · 覆盖率 100% · 12+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
@@ -32,7 +33,7 @@
 - [x] 配置 uv + pyproject.toml + ruff（弃用 black，ruff 一统 lint+format）+ mypy strict + pytest + coverage
 - [x] 写 `.env.example`（ANTHROPIC_API_KEY / WECOM_* / APP_ENV）
 - [x] 接入 Anthropic SDK，跑通最简调用 → `SuggestionEngine`（async，tool_use 强制 JSON）
-- [ ] 接入企微 API，**跑通最简文本推送**到测试群 → 移至 Week 2
+- [x] 接入企微 API，**跑通最简文本推送**到测试群 → 群机器人 webhook 路径（`WebhookWecomClient` + CLI `--push-webhook` + `make push`）
 
 ### 数据层
 - [x] 设计 Mock JSON schema → `src/models/{batch,alert,customer,suggestion,thresholds,action}.py`
