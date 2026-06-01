@@ -20,6 +20,7 @@ from src.models import (
     Severity,
     Suggestion,
 )
+from src.reports.aggregator import MonthlyReportData
 
 # Chinese fallback labels — used when CustomerConfig.industry_phrases lacks an entry.
 _ACTION_FALLBACK_LABEL: dict[ActionType, str] = {
@@ -163,6 +164,45 @@ def render_receipt_card(batch: Batch, suggestion: Suggestion, actual_qty: float)
         customer_id=batch.customer_id,
         batch_id=batch.batch_id,
         title=f"【工单回执】{batch.material_name} · {batch.batch_id}",
+        markdown=body,
+        buttons=[],
+        mentioned_userids=[],
+    )
+
+
+def render_monthly_summary_card(data: MonthlyReportData) -> Card:
+    """Render the markdown summary that accompanies the monthly PDF push.
+
+    The PDF goes to email/file storage for the director's boss-deck use; this
+    card is what lands in the WeCom group so the team has a copy-pasteable
+    one-screen view of last month's numbers (PRD §5.5).
+    """
+    top_lines = (
+        "\n".join(
+            f"- {t.action.value} · {t.approved_count} 条 · ¥{t.total_actual_savings:,.0f}"
+            for t in data.top_actions
+        )
+        or "- （上月暂无已执行动作）"
+    )
+
+    body = (
+        f"## 📊 【上月业绩报告】{data.customer_id} · {data.month}\n"
+        f"\n"
+        f"**节省总额（实际）**：**¥{data.total_savings_actual:,.0f}**\n"
+        f"**决策条数**：{data.total_count}（同意 {data.approved_count} · "
+        f"同意率 {data.approval_rate:.0%}）\n"
+        f"**ROI**：{data.roi_multiple:.1f}x 月费\n"
+        f"\n"
+        f"**最佳动作**：\n"
+        f"{top_lines}\n"
+        f"\n"
+        f"> 完整 PDF 报告（含案例与对比）已生成。"
+    )
+    return Card(
+        kind=CardKind.MONTHLY_SUMMARY,
+        customer_id=data.customer_id,
+        batch_id=f"monthly-{data.month}",
+        title=f"【上月业绩】{data.customer_id} · {data.month}",
         markdown=body,
         buttons=[],
         mentioned_userids=[],

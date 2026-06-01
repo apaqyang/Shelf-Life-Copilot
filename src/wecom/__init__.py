@@ -9,6 +9,7 @@ permission approval (see TODO.md "阻塞 & 风险").
 from src.wecom.cards import (
     render_alert_card,
     render_card_for_alert,
+    render_monthly_summary_card,
     render_out_of_scope_card,
     render_receipt_card,
     render_work_order_card,
@@ -22,6 +23,7 @@ __all__ = [
     "WecomPushError",
     "render_alert_card",
     "render_card_for_alert",
+    "render_monthly_summary_card",
     "render_out_of_scope_card",
     "render_receipt_card",
     "render_work_order_card",

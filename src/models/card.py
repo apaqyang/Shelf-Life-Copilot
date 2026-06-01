@@ -15,12 +15,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CardKind(StrEnum):
-    """The four card templates v0.1 must render (PRD §5.3 / TODO Week 2)."""
+    """The card templates v0.1 must render (PRD §5.3 / §5.5 / TODO Week 2)."""
 
     ALERT = "alert"
     WORK_ORDER = "work_order"
     RECEIPT = "receipt"
     OUT_OF_SCOPE = "out_of_scope"
+    MONTHLY_SUMMARY = "monthly_summary"
 
 
 def _now_utc() -> datetime:
