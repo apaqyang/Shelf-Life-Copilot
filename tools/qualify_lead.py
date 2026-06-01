@@ -28,12 +28,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.sales import (
     AnnualLossBand,
+    ContactInfo,
     CurrentMethod,
     DecisionAuthority,
     IndustryCategory,
     LeadAnswers,
     LeadAssessment,
     assess_lead,
+    render_lead_pdf,
 )
 from src.sales.report import render_assessment_markdown
 
@@ -163,9 +165,40 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--output-dir",
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
-        help=f"Where to write the JSON record (default: {DEFAULT_OUTPUT_DIR.relative_to(ROOT)}).",
+        help=f"Where to write outputs (default: {DEFAULT_OUTPUT_DIR.relative_to(ROOT)}).",
     )
+    p.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Skip the ROI one-pager PDF (default: write one alongside the JSON record).",
+    )
+    p.add_argument("--contact-name", default=None, help="Sales rep name on the PDF.")
+    p.add_argument("--contact-phone", default=None, help="Sales rep phone on the PDF.")
+    p.add_argument("--contact-email", default=None, help="Sales rep email on the PDF.")
     return p.parse_args(argv)
+
+
+def _build_contact(args: argparse.Namespace) -> ContactInfo | None:
+    """Build a ContactInfo only if at least the name was supplied."""
+    if args.contact_name is None:
+        return None
+    return ContactInfo(
+        name=args.contact_name,
+        phone=args.contact_phone,
+        email=args.contact_email,
+    )
+
+
+def _write_pdf(
+    assessment: LeadAssessment,
+    contact: ContactInfo | None,
+    output_dir: Path,
+) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    today = assessment.assessed_at.strftime("%Y%m%d")
+    out = output_dir / f"{_slugify(assessment.customer_name)}_{today}.pdf"
+    out.write_bytes(render_lead_pdf(assessment, contact=contact))
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -185,6 +218,10 @@ def main(argv: list[str] | None = None) -> int:
 
     record_path = _write_record(assessment, args.output_dir)
     print(f"\nJSON 留档已写入：{record_path}")
+
+    if not args.no_pdf:
+        pdf_path = _write_pdf(assessment, _build_contact(args), args.output_dir)
+        print(f"ROI 一页纸 PDF 已写入：{pdf_path}")
     return 0
 
 

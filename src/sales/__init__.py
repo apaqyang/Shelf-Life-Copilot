@@ -9,10 +9,12 @@ from src.sales.models import (
     LeadAssessment,
     PriorityTier,
 )
+from src.sales.pdf import ContactInfo, render_lead_pdf
 from src.sales.qualifier import assess_lead
 
 __all__ = [
     "AnnualLossBand",
+    "ContactInfo",
     "CurrentMethod",
     "DecisionAuthority",
     "IndustryCategory",
@@ -20,4 +22,5 @@ __all__ = [
     "LeadAssessment",
     "PriorityTier",
     "assess_lead",
+    "render_lead_pdf",
 ]
