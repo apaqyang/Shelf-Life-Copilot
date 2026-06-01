@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 
@@ -16,6 +17,8 @@ from src.cli import (
 )
 from src.models import Alert, Card, CardKind, Severity, Suggestion
 from src.models.action import ActionType
+from src.models.decision import DecisionOutcome
+from src.persistence import DecisionStore
 from src.scheduler import ScanError, ScanResult
 from src.suggestion import AnthropicProvider, MoonshotProvider
 from src.wecom import DryRunWecomClient, WebhookWecomClient
@@ -266,6 +269,250 @@ class TestMainRenderCards:
         assert exit_code == 0
         assert "Card #1" in captured.out
         assert "## body" in captured.out
+
+
+class TestRecordDecision:
+    """--record-decision writes one Decision row to SQLite (no LLM, no WeCom)."""
+
+    def test_record_decision_args_parsed(self) -> None:
+        ns = parse_args(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+            ]
+        )
+        assert ns.record_decision == "A-001"
+        assert ns.outcome == "approved"
+        assert ns.action == "transform"
+        assert ns.savings_estimate == 8500.0
+
+    def test_record_decision_defaults(self) -> None:
+        ns = parse_args(["--customer", "customerA"])
+        assert ns.record_decision is None
+        assert ns.outcome is None
+        assert ns.action is None
+        assert ns.savings_estimate is None
+
+    @pytest.mark.asyncio
+    async def test_writes_row_to_specified_db(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+                "--actual-qty",
+                "830",
+                "--notes",
+                "车间反馈到位",
+                "--db",
+                str(db),
+                "--today",
+                "2026-05-26",
+            ]
+        )
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "A-001" in out
+        assert "approved" in out
+
+        results = DecisionStore(db).list_for_period(
+            "customerA",
+            start=datetime(2026, 5, 1, tzinfo=UTC),
+            end=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        assert len(results) == 1
+        d = results[0]
+        assert d.batch_id == "A-001"
+        # material_name auto-resolved from data/batches/customerA.json
+        assert d.material_name == "冷冻虾仁"
+        assert d.outcome is DecisionOutcome.APPROVED
+        assert d.action is ActionType.TRANSFORM
+        assert d.savings_estimate == 8500.0
+        assert d.actual_qty == 830.0
+        assert d.notes == "车间反馈到位"
+
+    @pytest.mark.asyncio
+    async def test_outcome_required(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+                "--db",
+                str(db),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "--outcome" in err
+
+    @pytest.mark.asyncio
+    async def test_action_required(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--outcome",
+                "approved",
+                "--savings-estimate",
+                "8500",
+                "--db",
+                str(db),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "--action" in err
+
+    @pytest.mark.asyncio
+    async def test_savings_estimate_required(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--db",
+                str(db),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "--savings-estimate" in err
+
+    @pytest.mark.asyncio
+    async def test_unknown_batch_returns_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-DOES-NOT-EXIST",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+                "--db",
+                str(db),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "A-DOES-NOT-EXIST" in err
+
+    @pytest.mark.asyncio
+    async def test_uses_now_when_today_omitted(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Without --today, decided_at must be tz-aware and bracketed by now()."""
+        from datetime import timedelta
+
+        db = tmp_path / "decisions.db"
+        before = datetime.now(UTC)
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+                "--db",
+                str(db),
+            ]
+        )
+        after = datetime.now(UTC)
+        assert exit_code == 0
+
+        # Wide window: ±1 day from the recorded moment is plenty for a same-process write.
+        results = DecisionStore(db).list_for_period(
+            "customerA",
+            start=before - timedelta(days=1),
+            end=after + timedelta(days=1),
+        )
+        assert len(results) == 1
+        d = results[0]
+        assert d.decided_at.tzinfo is not None
+        assert before <= d.decided_at <= after
+
+    @pytest.mark.asyncio
+    async def test_conflicts_with_revise_batch(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        db = tmp_path / "decisions.db"
+        exit_code = await main(
+            [
+                "--customer",
+                "customerA",
+                "--record-decision",
+                "A-001",
+                "--revise-batch",
+                "A-002",
+                "--feedback",
+                "x",
+                "--outcome",
+                "approved",
+                "--action",
+                "transform",
+                "--savings-estimate",
+                "8500",
+                "--db",
+                str(db),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert exit_code == 2
+        assert "record-decision" in err.lower()
 
 
 class TestPushWebhookFlag:

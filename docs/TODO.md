@@ -15,13 +15,14 @@
 - ✅ **编排层 + CLI**：`src/scheduler/` + `src/cli.py`（端到端 dry-run 验证通过；改方案入口已暴露）
 - ✅ **企微卡片渲染层**：`src/wecom/`（4 套模板 · DryRunWecomClient · `--render-cards`）
 - ✅ **改方案单轮重生成**：`ScanRunner.revise_for_batch` + CLI `--revise-batch / --feedback`（越界自动红标）
-- ✅ **企微真实推送 · 路径 A（群机器人 webhook）**：`WebhookWecomClient` + CLI `--push-webhook` + `make push`（自测路径，群主权限即可）
+- ✅ **企微真实推送 · 路径 A（群机器人 webhook）**：`WebhookWecomClient` + CLI `--push-webhook` + `make push`（自测路径，群主权限即可，2026-05-31 真群验证 6 条 errcode=0）
 - ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
 - ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
+- ✅ **决策日志 SQLite 持久化**：`src/persistence/DecisionStore` + CLI `--record-decision` + `make report SOURCE=sqlite`（v0.5 持久层就位，端到端闭环已 smoke-test）
 - ⏳ **企微真实推送 · 路径 B（自建应用 + 回调）**：按钮交互回调，需客户管理员权限 + 公网域名，待 PoC 启动
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：222 测试 passed · 覆盖率 100% · 12+ commits · CI 全绿
+**当前指标**：247 测试 passed · 覆盖率 100% · 13+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
@@ -133,8 +134,8 @@
 
 - [ ] 对接客户真实 ERP / WMS（SAP / 用友 / 金蝶 / 自研）
 - [x] 月度 PDF 报告**生成器**已完成（mock 数据驱动）→ `src/reports/` + `make report`
-- [ ] 月度 PDF 报告**自动定时**（每月 1 号 + 决策日志持久化驱动数据源）
-- [ ] 决策日志持久化（Decision 模型已落地 → 接 SQLite/PostgreSQL）
+- [ ] 月度 PDF 报告**自动定时**（每月 1 号触发，持久化数据源已就位）
+- [x] 决策日志持久化（SQLite）→ `src/persistence/DecisionStore` + CLI `--record-decision`；v0.5+ 迁 PostgreSQL 只换 store 实现
 - [ ] 多租户配置后台
 - [ ] 私有化部署方案
 - [ ] 跨批次联合优化（v1.5）
