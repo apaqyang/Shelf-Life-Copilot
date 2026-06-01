@@ -22,11 +22,12 @@
 - ✅ **路径 B 服务端骨架**：`src/webhook/` FastAPI POST `/webhook/wecom` 处理 click 事件（approve/snooze/revise）→ DecisionStore；GET 回显 echostr。明文模式，AES + 签名待客户 PoC 启动时加。
 - ✅ **月度报告自动定时**：`MonthlyReportScheduler` APScheduler cron 每月 1 号 08:00 Asia/Shanghai；`render_monthly_summary_card` 摘要卡；`make monthly [PUSH=1]` 手动触发；端到端 smoke 通过（决策 → SQLite → PDF + 卡片 → 企微群）
 - ✅ **长跑服务入口**：`src/runtime/` Settings (pydantic-settings) + FastAPI lifespan 把 DailyScheduler + MonthlyReportScheduler 挂在 uvicorn 启动上；`uv run uvicorn src.main:app` 一行起服务；缺 LLM key 时 daily 自动跳过 + warn
+- ✅ **SuggestionStore + 决策真值闭环**：`src/persistence/SuggestionStore` 持久化每次 LLM 输出；ScanRunner 自动 save；webhook click 查 `latest_for_batch` 用真实 action/savings_estimate 填 Decision（替换之前 TRANSFORM/0.0 占位）；CLI scan/revise 也接入。月度报告数据真实性闭环。
 - ⏳ **路径 B 加解密 + 签名校验**：需客户 corp_secret，PoC 启动时单独 PR
 - ⏳ **路径 B 文字反馈 → LLM 自动重生成**：需会话状态管理，v0.2 范围
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：317 测试 passed · 覆盖率 100% · 16+ commits · CI 全绿
+**当前指标**：337 测试 passed · 覆盖率 100% · 17+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---

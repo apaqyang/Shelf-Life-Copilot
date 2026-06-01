@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.alerts import scan_batch
 from src.models import Alert, Card, Suggestion
+from src.persistence import SuggestionStore
 from src.repository import load_batches, load_customer_config
 from src.suggestion import SuggestionEngine
 from src.wecom import render_card_for_alert
@@ -51,9 +52,11 @@ class ScanRunner:
         self,
         engine: SuggestionEngine | None = None,
         data_root: Path | None = None,
+        suggestion_store: SuggestionStore | None = None,
     ) -> None:
         self._engine = engine
         self._data_root = data_root
+        self._suggestion_store = suggestion_store
 
     async def run_for_customer(
         self,
@@ -100,6 +103,8 @@ class ScanRunner:
                 continue
             suggestions.append(suggestion)
             cards.append(render_card_for_alert(batch, alert, suggestion, config))
+            if self._suggestion_store is not None:
+                self._suggestion_store.save(suggestion)
 
         return ScanResult(
             customer_id=customer_id,
@@ -153,6 +158,8 @@ class ScanRunner:
             else:
                 suggestions.append(suggestion)
                 cards.append(render_card_for_alert(batch, alert, suggestion, config))
+                if self._suggestion_store is not None:
+                    self._suggestion_store.save(suggestion)
 
         return ScanResult(
             customer_id=customer_id,

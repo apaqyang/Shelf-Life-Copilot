@@ -12,12 +12,15 @@ scope, see [[v0.5 SuggestionStore]] for the follow-up).
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from src.models import ActionType, Decision, DecisionOutcome
-from src.persistence import DecisionStore
+from src.persistence import DecisionStore, SuggestionStore
 from src.repository import load_batches
 from src.webhook.schemas import WecomEvent
+
+logger = logging.getLogger(__name__)
 
 
 class UnknownActionError(ValueError):
@@ -48,8 +51,18 @@ def _parse_event_key(event_key: str) -> tuple[str, str, str]:
     return parts[0], parts[1], parts[2]
 
 
-def handle_click(event: WecomEvent, store: DecisionStore) -> str:
-    """Route a click event to the right side effect, return a short status line."""
+def handle_click(
+    event: WecomEvent,
+    store: DecisionStore,
+    suggestion_store: SuggestionStore | None = None,
+) -> str:
+    """Route a click event to the right side effect, return a short status line.
+
+    When `suggestion_store` is wired, approve/snooze decisions carry the real
+    action + savings_estimate from the most recent LLM suggestion for that
+    batch. Without it, or when no suggestion exists, we still land a Decision
+    with TRANSFORM/0.0 placeholders + a WARNING so the audit log stays gap-free.
+    """
     if not event.event_key:
         raise UnknownActionError("missing EventKey on click event")
 
@@ -71,17 +84,43 @@ def handle_click(event: WecomEvent, store: DecisionStore) -> str:
     if batch is None:
         raise UnknownBatchError(f"batch {batch_id!r} not found for customer {customer_id!r}")
 
-    # v0.1 placeholders — action / savings_estimate come from the original
-    # Suggestion once SuggestionStore lands. Until then we record the click
-    # event itself so the monthly report at least sees a non-zero count.
+    action, savings_estimate = _resolve_action_and_savings(customer_id, batch_id, suggestion_store)
+
     decision = Decision(
         batch_id=batch.batch_id,
         customer_id=customer_id,
         material_name=batch.material_name,
         decided_at=datetime.now(UTC),
-        action=ActionType.TRANSFORM,
+        action=action,
         outcome=outcome,
-        savings_estimate=0.0,
+        savings_estimate=savings_estimate,
     )
     rowid = store.save(decision)
     return f"Recorded decision #{rowid} ({outcome.value})"
+
+
+def _resolve_action_and_savings(
+    customer_id: str,
+    batch_id: str,
+    suggestion_store: SuggestionStore | None,
+) -> tuple[ActionType, float]:
+    """Return (action, savings_estimate) for the new Decision.
+
+    Prefer the latest LLM Suggestion for this batch when a store is available;
+    fall back to TRANSFORM/0.0 placeholders + WARNING so the audit log stays
+    complete even before SuggestionStore is wired into all call sites.
+    """
+    if suggestion_store is None:
+        return ActionType.TRANSFORM, 0.0
+
+    latest = suggestion_store.latest_for_batch(customer_id, batch_id)
+    if latest is None:
+        logger.warning(
+            "Click on %s/%s but no suggestion found in store; "
+            "Decision will use placeholder action/savings.",
+            customer_id,
+            batch_id,
+        )
+        return ActionType.TRANSFORM, 0.0
+
+    return latest.action, latest.savings_estimate
