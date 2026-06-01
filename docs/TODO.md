@@ -19,10 +19,12 @@
 - ✅ **Demo 离线兜底**：`make demo` + RUNBOOK + 兜底视频分镜
 - ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
 - ✅ **决策日志 SQLite 持久化**：`src/persistence/DecisionStore` + CLI `--record-decision` + `make report SOURCE=sqlite`（v0.5 持久层就位，端到端闭环已 smoke-test）
-- ⏳ **企微真实推送 · 路径 B（自建应用 + 回调）**：按钮交互回调，需客户管理员权限 + 公网域名，待 PoC 启动
+- ✅ **路径 B 服务端骨架**：`src/webhook/` FastAPI POST `/webhook/wecom` 处理 click 事件（approve/snooze/revise）→ DecisionStore；GET 回显 echostr。明文模式，AES + 签名待客户 PoC 启动时加。
+- ⏳ **路径 B 加解密 + 签名校验**：需客户 corp_secret，PoC 启动时单独 PR
+- ⏳ **路径 B 文字反馈 → LLM 自动重生成**：需会话状态管理，v0.2 范围
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：247 测试 passed · 覆盖率 100% · 13+ commits · CI 全绿
+**当前指标**：265 测试 passed · 覆盖率 100% · 14+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
