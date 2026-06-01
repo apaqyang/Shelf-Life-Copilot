@@ -156,7 +156,7 @@ def render_receipt_card(batch: Batch, suggestion: Suggestion, actual_qty: float)
         f"**实际处置量**：{actual_qty:,.0f} {batch.unit}\n"
         f"**预估节省**：**¥{suggestion.savings_estimate:,.0f}**\n"
         f"\n"
-        f"_决策回执已归档，本月累计节省将计入复盘报告。_"
+        f"> 决策回执已归档，本月累计节省将计入复盘报告。"
     )
     return Card(
         kind=CardKind.RECEIPT,
