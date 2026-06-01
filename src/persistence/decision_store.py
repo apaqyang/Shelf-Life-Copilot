@@ -45,8 +45,10 @@ class DecisionStore:
     """
 
     def __init__(self, db_path: Path | str) -> None:
-        self._conn = sqlite3.connect(db_path, isolation_level=None)
-        # WAL would be nicer for prod but not portable on :memory:; default fine for v0.1.
+        # check_same_thread=False lets FastAPI dispatch requests on its worker
+        # thread pool while we still share one connection. Writes are serialized
+        # by sqlite's own busy-handler; v0.1 traffic is one request at a time.
+        self._conn = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
         self._conn.executescript(_SCHEMA)
 
     def save(self, decision: Decision) -> int:
