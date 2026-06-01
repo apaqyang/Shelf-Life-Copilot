@@ -55,5 +55,8 @@ logs/
 *.sqlite
 *.sqlite3
 
+# Sales lead artifacts (含客户姓名/电话/年损金额等敏感商务数据，不入仓库)
+data/leads/
+
 # Distribution artifacts
 node_modules/
