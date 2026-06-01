@@ -20,11 +20,12 @@
 - ✅ **月度 PDF 报告生成器**：`src/reports/` + `make report`（销售弹药，PRD §5.5）
 - ✅ **决策日志 SQLite 持久化**：`src/persistence/DecisionStore` + CLI `--record-decision` + `make report SOURCE=sqlite`（v0.5 持久层就位，端到端闭环已 smoke-test）
 - ✅ **路径 B 服务端骨架**：`src/webhook/` FastAPI POST `/webhook/wecom` 处理 click 事件（approve/snooze/revise）→ DecisionStore；GET 回显 echostr。明文模式，AES + 签名待客户 PoC 启动时加。
+- ✅ **月度报告自动定时**：`MonthlyReportScheduler` APScheduler cron 每月 1 号 08:00 Asia/Shanghai；`render_monthly_summary_card` 摘要卡；`make monthly [PUSH=1]` 手动触发；端到端 smoke 通过（决策 → SQLite → PDF + 卡片 → 企微群）
 - ⏳ **路径 B 加解密 + 签名校验**：需客户 corp_secret，PoC 启动时单独 PR
 - ⏳ **路径 B 文字反馈 → LLM 自动重生成**：需会话状态管理，v0.2 范围
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
 
-**当前指标**：265 测试 passed · 覆盖率 100% · 14+ commits · CI 全绿
+**当前指标**：292 测试 passed · 覆盖率 100% · 15+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
@@ -136,7 +137,7 @@
 
 - [ ] 对接客户真实 ERP / WMS（SAP / 用友 / 金蝶 / 自研）
 - [x] 月度 PDF 报告**生成器**已完成（mock 数据驱动）→ `src/reports/` + `make report`
-- [ ] 月度 PDF 报告**自动定时**（每月 1 号触发，持久化数据源已就位）
+- [x] 月度 PDF 报告**自动定时** → `MonthlyReportScheduler`（每月 1 号 08:00 Asia/Shanghai · cron 业务/调度分层）+ `make monthly [PUSH=1]` 手动触发 + 摘要卡推送企微
 - [x] 决策日志持久化（SQLite）→ `src/persistence/DecisionStore` + CLI `--record-decision`；v0.5+ 迁 PostgreSQL 只换 store 实现
 - [ ] 多租户配置后台
 - [ ] 私有化部署方案
