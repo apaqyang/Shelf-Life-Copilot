@@ -14,10 +14,12 @@ from src.reports.aggregator import (
     aggregate_monthly_report,
 )
 from src.reports.renderer import render_monthly_report_pdf
+from src.reports.sources import load_decisions_from_sqlite
 
 __all__ = [
     "ActionTally",
     "MonthlyReportData",
     "aggregate_monthly_report",
+    "load_decisions_from_sqlite",
     "render_monthly_report_pdf",
 ]

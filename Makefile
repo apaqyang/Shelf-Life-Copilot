@@ -37,8 +37,11 @@ scan: ## 跑一次扫描，用法 make scan CUSTOMER=customerA [TODAY=2026-05-26
 demo: ## 离线渲染 demo 卡片到 docs/demo_samples/ (彩排 + 兜底用)
 	@uv run python tools/render_demo_cards.py
 
-report: ## 生成月度 PDF 报告到 docs/demo_samples/monthly_report_<customer>.pdf
-	@uv run python tools/render_monthly_report.py
+report: ## 生成月度 PDF 报告 (用法 make report [SOURCE=mock|sqlite] [MONTH=2026-05] [DB=data/decisions.db])
+	@uv run python tools/render_monthly_report.py \
+		$(if $(SOURCE),--source $(SOURCE),) \
+		$(if $(MONTH),--month $(MONTH),) \
+		$(if $(DB),--db $(DB),)
 
 validate-llm: ## 真实 LLM 5+ 场景合规率验证 (用法 PROVIDER=moonshot)
 	@uv run python tools/validate_llm.py --provider $(or $(PROVIDER),anthropic)

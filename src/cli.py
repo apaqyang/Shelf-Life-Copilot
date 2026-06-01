@@ -5,6 +5,8 @@ Usage:
     python -m src.cli --customer customerA --provider moonshot --model moonshot-v1-32k
     python -m src.cli --customer customerA --revise-batch A-001 \\
         --feedback "虾饺线满了，能不能改成打折清仓"
+    python -m src.cli --customer customerA --record-decision A-001 \\
+        --outcome approved --action transform --savings-estimate 8500
 
 `--dry-run` skips LLM calls. Otherwise the configured provider's API key is
 required: ANTHROPIC_API_KEY (default) or MOONSHOT_API_KEY (--provider moonshot).
@@ -12,6 +14,11 @@ required: ANTHROPIC_API_KEY (default) or MOONSHOT_API_KEY (--provider moonshot).
 `--revise-batch BATCH_ID --feedback "..."` re-runs the LLM for a single batch
 with operator feedback (PRD §5.3 改方案). Out-of-scope suggestions still come
 back as the red-stamped card — the guard-rail is visible by design.
+
+`--record-decision BATCH_ID --outcome ... --action ... --savings-estimate N`
+writes a Decision log entry to SQLite (no LLM, no WeCom). The monthly PDF
+report reads from this DB when `--source sqlite` is passed. Use this in demos
+to simulate the director's ✅ 同意 click landing in the audit log.
 """
 
 from __future__ import annotations
@@ -21,8 +28,11 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 
+from src.models import ActionType, Decision, DecisionOutcome
+from src.persistence import DecisionStore
+from src.repository import load_batches
 from src.scheduler import ScanResult, ScanRunner
 from src.suggestion import (
     ANTHROPIC_DEFAULT_MODEL,
@@ -33,6 +43,8 @@ from src.suggestion import (
     build_moonshot_provider,
 )
 from src.wecom import DryRunWecomClient, WebhookWecomClient, WecomClient
+
+_DEFAULT_DB_PATH = "data/decisions.db"
 
 _PROVIDER_CHOICES = ("anthropic", "moonshot")
 
@@ -92,6 +104,52 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Falls back to env WECOM_WEBHOOK_URL when omitted. "
             "Without either, cards stay in-memory (DryRunWecomClient)."
         ),
+    )
+    parser.add_argument(
+        "--record-decision",
+        default=None,
+        metavar="BATCH_ID",
+        help="Write a Decision log entry for this batch (requires --outcome / --action / --savings-estimate).",
+    )
+    parser.add_argument(
+        "--outcome",
+        choices=tuple(o.value for o in DecisionOutcome),
+        default=None,
+        help="Decision outcome for --record-decision.",
+    )
+    parser.add_argument(
+        "--action",
+        choices=tuple(a.value for a in ActionType),
+        default=None,
+        help="Disposal action for --record-decision.",
+    )
+    parser.add_argument(
+        "--savings-estimate",
+        type=float,
+        default=None,
+        help="Estimated savings (¥) for --record-decision.",
+    )
+    parser.add_argument(
+        "--actual-qty",
+        type=float,
+        default=None,
+        help="Optional actual completion quantity for --record-decision.",
+    )
+    parser.add_argument(
+        "--actual-savings",
+        type=float,
+        default=None,
+        help="Optional actual savings (¥) for --record-decision.",
+    )
+    parser.add_argument(
+        "--notes",
+        default=None,
+        help="Optional free-text notes for --record-decision.",
+    )
+    parser.add_argument(
+        "--db",
+        default=_DEFAULT_DB_PATH,
+        help=f"SQLite path for the decision log (default: {_DEFAULT_DB_PATH}).",
     )
     return parser.parse_args(argv)
 
@@ -183,12 +241,77 @@ def format_cards(result: ScanResult) -> str:
     return "\n".join(blocks)
 
 
+def _decision_timestamp(today: date | None) -> datetime:
+    """Pick the timestamp for a recorded decision.
+
+    --today is meant for deterministic demos; we anchor at noon UTC on that
+    date so multiple decisions logged on the same demo day sort consistently
+    yet stay clearly inside the calendar day's monthly window.
+    """
+    if today is not None:
+        return datetime(today.year, today.month, today.day, 12, 0, tzinfo=UTC)
+    return datetime.now(UTC)
+
+
+def _run_record_decision(args: argparse.Namespace) -> int:
+    """Build a Decision from CLI args, persist it, print a one-line confirmation."""
+    if args.outcome is None:
+        print("--record-decision requires --outcome.", file=sys.stderr)
+        return 2
+    if args.action is None:
+        print("--record-decision requires --action.", file=sys.stderr)
+        return 2
+    if args.savings_estimate is None:
+        print("--record-decision requires --savings-estimate.", file=sys.stderr)
+        return 2
+
+    batches = load_batches(args.customer)
+    batch = next((b for b in batches if b.batch_id == args.record_decision), None)
+    if batch is None:
+        print(
+            f"batch {args.record_decision!r} not found for customer {args.customer!r}.",
+            file=sys.stderr,
+        )
+        return 2
+
+    decision = Decision(
+        batch_id=batch.batch_id,
+        customer_id=args.customer,
+        material_name=batch.material_name,
+        decided_at=_decision_timestamp(args.today),
+        action=ActionType(args.action),
+        outcome=DecisionOutcome(args.outcome),
+        savings_estimate=args.savings_estimate,
+        actual_savings=args.actual_savings,
+        actual_qty=args.actual_qty,
+        notes=args.notes,
+    )
+
+    rowid = DecisionStore(args.db).save(decision)
+    print(
+        f"Recorded decision #{rowid}: {batch.batch_id} {args.outcome}"
+        f" action={args.action} savings=¥{args.savings_estimate:,.0f}"
+        f" → {args.db}"
+    )
+    return 0
+
+
 async def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     args = parse_args(argv)
+
+    if args.record_decision is not None and args.revise_batch is not None:
+        print(
+            "--record-decision cannot be combined with --revise-batch.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.record_decision is not None:
+        return _run_record_decision(args)
 
     if args.revise_batch is not None and args.feedback is None:
         print("--revise-batch requires --feedback to be set.", file=sys.stderr)
