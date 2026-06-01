@@ -6,5 +6,6 @@ DecisionStore API.
 """
 
 from src.persistence.decision_store import DecisionStore
+from src.persistence.suggestion_store import SuggestionStore
 
-__all__ = ["DecisionStore"]
+__all__ = ["DecisionStore", "SuggestionStore"]

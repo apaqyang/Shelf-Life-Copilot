@@ -15,8 +15,8 @@ from fastapi.testclient import TestClient
 
 from src.main import app
 from src.models import DecisionOutcome
-from src.persistence import DecisionStore
-from src.webhook.router import get_decision_store
+from src.persistence import DecisionStore, SuggestionStore
+from src.webhook.router import get_decision_store, get_suggestion_store
 
 
 @pytest.fixture
@@ -25,8 +25,14 @@ def store() -> DecisionStore:
 
 
 @pytest.fixture
-def client(store: DecisionStore) -> Iterator[TestClient]:
+def suggestion_store() -> SuggestionStore:
+    return SuggestionStore(":memory:")
+
+
+@pytest.fixture
+def client(store: DecisionStore, suggestion_store: SuggestionStore) -> Iterator[TestClient]:
     app.dependency_overrides[get_decision_store] = lambda: store
+    app.dependency_overrides[get_suggestion_store] = lambda: suggestion_store
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -180,3 +186,63 @@ class TestDefaultStoreFactory:
         assert router_mod.get_decision_store() is store
 
         router_mod._default_store.cache_clear()
+
+    def test_get_suggestion_store_returns_a_real_store(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import importlib
+
+        router_mod = importlib.import_module("src.webhook.router")
+
+        monkeypatch.setattr(router_mod, "_DEFAULT_DB", tmp_path / "y.db")
+        router_mod._default_suggestion_store.cache_clear()
+
+        store = router_mod.get_suggestion_store()
+        assert isinstance(store, SuggestionStore)
+        assert router_mod.get_suggestion_store() is store
+
+        router_mod._default_suggestion_store.cache_clear()
+
+
+class TestSuggestionStoreIntegration:
+    """End-to-end: a persisted Suggestion's action / savings_estimate flows
+    through the webhook click into the Decision row."""
+
+    def test_approve_uses_persisted_suggestion(
+        self,
+        client: TestClient,
+        store: DecisionStore,
+        suggestion_store: SuggestionStore,
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from src.models import ActionType, Suggestion
+
+        suggestion_store.save(
+            Suggestion(
+                batch_id="A-001",
+                customer_id="customerA",
+                action=ActionType.DISCOUNT_CLEARANCE,
+                savings_estimate=6200.0,
+                rationale="清仓渠道吸收率 75%",
+                confidence=0.78,
+                is_standard=True,
+                generated_at=datetime(2026, 5, 26, 7, 5, tzinfo=UTC),
+                llm_model="claude-sonnet-4-6",
+            )
+        )
+
+        resp = client.post(
+            "/webhook/wecom",
+            json=_click_payload("approve:customerA:A-001"),
+        )
+        assert resp.status_code == 200
+
+        rows = store.list_for_period(
+            "customerA",
+            start=datetime(2026, 5, 1, tzinfo=UTC),
+            end=datetime(2027, 1, 1, tzinfo=UTC),
+        )
+        assert len(rows) == 1
+        assert rows[0].action is ActionType.DISCOUNT_CLEARANCE
+        assert rows[0].savings_estimate == 6200.0

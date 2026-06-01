@@ -152,6 +152,88 @@ class TestScanResultModel:
             result.customer_id = "customerB"  # type: ignore[misc]
 
 
+class TestScanRunnerSuggestionPersistence:
+    """When a SuggestionStore is injected, every successful LLM call must persist.
+
+    Webhook click → DecisionStore relies on this: it queries `latest_for_batch`
+    to fill Decision.action / savings_estimate with real LLM values.
+    """
+
+    @pytest.mark.asyncio
+    async def test_run_for_customer_persists_each_suggestion(self, mock_engine: AsyncMock) -> None:
+        from src.persistence import SuggestionStore
+
+        store = SuggestionStore(":memory:")
+        runner = ScanRunner(engine=mock_engine, suggestion_store=store)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+
+        # All 6 customerA alerts produced suggestions → all 6 must be in the store.
+        assert len(result.suggestions) == 6
+        for s in result.suggestions:
+            persisted = store.latest_for_batch("customerA", s.batch_id)
+            assert persisted is not None
+            assert persisted.batch_id == s.batch_id
+
+    @pytest.mark.asyncio
+    async def test_revise_for_batch_persists_suggestion(self) -> None:
+        from src.persistence import SuggestionStore
+
+        engine = AsyncMock(spec=SuggestionEngine)
+
+        async def _suggest(
+            batch: Batch, alert: Alert, customer: CustomerConfig, feedback: str | None = None
+        ) -> Suggestion:
+            return Suggestion(
+                batch_id=batch.batch_id,
+                customer_id=customer.customer_id,
+                action=ActionType.DISCOUNT_CLEARANCE,
+                savings_estimate=6200.0,
+                rationale="清仓渠道吸收率 75%",
+                confidence=0.78,
+                is_standard=True,
+                llm_model="claude-sonnet-4-6",
+                user_feedback=feedback,
+            )
+
+        engine.suggest = AsyncMock(side_effect=_suggest)
+        store = SuggestionStore(":memory:")
+        runner = ScanRunner(engine=engine, suggestion_store=store)
+
+        await runner.revise_for_batch(
+            "customerA",
+            batch_id="A-001",
+            feedback="改成打折",
+            today=date(2026, 5, 26),
+        )
+        persisted = store.latest_for_batch("customerA", "A-001")
+        assert persisted is not None
+        assert persisted.action is ActionType.DISCOUNT_CLEARANCE
+        assert persisted.savings_estimate == 6200.0
+        assert persisted.user_feedback == "改成打折"
+
+    @pytest.mark.asyncio
+    async def test_failed_llm_call_does_not_persist(self) -> None:
+        """If the LLM raises, nothing should land in the suggestion log."""
+        from src.persistence import SuggestionStore
+
+        engine = AsyncMock(spec=SuggestionEngine)
+        engine.suggest = AsyncMock(side_effect=SuggestionEngineError("boom"))
+
+        store = SuggestionStore(":memory:")
+        runner = ScanRunner(engine=engine, suggestion_store=store)
+        await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        # No rows for any batch.
+        for batch_id in ("A-001", "A-002", "A-003", "A-004", "A-005"):
+            assert store.latest_for_batch("customerA", batch_id) is None
+
+    @pytest.mark.asyncio
+    async def test_no_store_keeps_legacy_behavior(self, mock_engine: AsyncMock) -> None:
+        """Backward compat: omitting suggestion_store is allowed and harmless."""
+        runner = ScanRunner(engine=mock_engine)  # no suggestion_store
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        assert len(result.suggestions) == 6  # behavior unchanged
+
+
 class TestScanRunnerReviseForBatch:
     """revise_for_batch — single-batch path used by `--revise-batch` CLI flag.
 

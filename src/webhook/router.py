@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
-from src.persistence import DecisionStore
+from src.persistence import DecisionStore, SuggestionStore
 from src.webhook.handlers import (
     UnknownActionError,
     UnknownBatchError,
@@ -33,9 +33,20 @@ def _default_store() -> DecisionStore:
     return DecisionStore(_DEFAULT_DB)
 
 
+@lru_cache(maxsize=1)
+def _default_suggestion_store() -> SuggestionStore:
+    """Same file as DecisionStore — two tables, one sqlite database."""
+    return SuggestionStore(_DEFAULT_DB)
+
+
 def get_decision_store() -> DecisionStore:
     """FastAPI dependency hook. Tests override via `app.dependency_overrides`."""
     return _default_store()
+
+
+def get_suggestion_store() -> SuggestionStore:
+    """FastAPI dependency hook for the SuggestionStore singleton."""
+    return _default_suggestion_store()
 
 
 @router.get("/webhook/wecom", response_class=PlainTextResponse)
@@ -53,13 +64,14 @@ async def verify_url(echostr: Annotated[str, Query(...)]) -> str:
 async def receive_event(
     event: WecomEvent,
     store: Annotated[DecisionStore, Depends(get_decision_store)],
+    suggestion_store: Annotated[SuggestionStore, Depends(get_suggestion_store)],
 ) -> WecomCallbackResponse:
     """Route a WeCom callback event to the click handler, or 200 no-op."""
     if event.msg_type != "event" or event.event != "click":
         return WecomCallbackResponse(ok=True, detail="ignored (non-click message)")
 
     try:
-        detail = handle_click(event, store)
+        detail = handle_click(event, store, suggestion_store=suggestion_store)
     except UnknownActionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except UnknownBatchError as exc:

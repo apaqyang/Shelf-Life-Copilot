@@ -18,6 +18,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.persistence import SuggestionStore
 from src.reports import ReportRunResult
 from src.runtime.config import Settings
 from src.scheduler import (
@@ -138,7 +139,12 @@ def build_lifespan(
             )
             app.state.daily_scheduler = None
         else:
-            runner = ScanRunner(engine=SuggestionEngine(provider=provider))
+            # Share the decisions DB file with both stores — two tables, one sqlite.
+            suggestion_store = SuggestionStore(settings.decisions_db_path)
+            runner = ScanRunner(
+                engine=SuggestionEngine(provider=provider),
+                suggestion_store=suggestion_store,
+            )
             daily = DailyScheduler(
                 runner=runner,
                 customer_ids=settings.scan_customers_list,

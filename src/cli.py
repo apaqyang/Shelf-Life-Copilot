@@ -31,7 +31,7 @@ import sys
 from datetime import UTC, date, datetime
 
 from src.models import ActionType, Decision, DecisionOutcome
-from src.persistence import DecisionStore
+from src.persistence import DecisionStore, SuggestionStore
 from src.repository import load_batches
 from src.scheduler import ScanResult, ScanRunner
 from src.suggestion import (
@@ -321,13 +321,17 @@ async def main(argv: list[str] | None = None) -> int:
         return 2
 
     engine: SuggestionEngine | None = None
+    suggestion_store: SuggestionStore | None = None
     if not args.dry_run:
         provider = _build_provider(args.provider, args.model)
         if provider is None:
             return 2
         engine = SuggestionEngine(provider=provider)
+        # Same DB file as DecisionStore — two tables, one sqlite. webhook clicks
+        # later read the latest suggestion to fill Decision.action / savings.
+        suggestion_store = SuggestionStore(args.db)
 
-    runner = ScanRunner(engine=engine)
+    runner = ScanRunner(engine=engine, suggestion_store=suggestion_store)
 
     if args.revise_batch is not None:
         result = await runner.revise_for_batch(
