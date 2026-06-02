@@ -6,6 +6,8 @@ through code review, not folklore.
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 from src.models import ActionType
 from src.sales.models import (
     AnnualLossBand,
@@ -133,3 +135,18 @@ def assess_lead(answers: LeadAnswers) -> LeadAssessment:
         sales_pitch=_PITCH_BY_BAND[resolved_band],
         raw_answers=answers,
     )
+
+
+def extract_answers_from_assessment_json(json_str: str) -> LeadAnswers:
+    """Pull `raw_answers` out of a serialized LeadAssessment for re-evaluation.
+
+    Use when a sales rep wants to tweak one question (e.g. Q5 loss band after the
+    customer clarified) and re-run scoring without retyping the other 7 answers.
+    Wraps Pydantic's ValidationError as a flat ValueError so callers don't need to
+    import the Pydantic exception.
+    """
+    try:
+        assessment = LeadAssessment.model_validate_json(json_str)
+    except ValidationError as exc:
+        raise ValueError(f"Not a valid LeadAssessment JSON: {exc}") from exc
+    return assessment.raw_answers

@@ -248,3 +248,50 @@ class TestPassthroughFields:
         assert a.raw_answers == ans
         assert a.customer_name == "客户A"
         assert a.assessed_at.tzinfo is not None
+
+
+class TestExtractAnswersFromAssessmentJson:
+    """`--reassess` reads a written LeadAssessment JSON back into LeadAnswers
+    so sales can tweak one field and re-run without filling the 8 questions again."""
+
+    def test_roundtrip_preserves_all_answer_fields(self) -> None:
+        from src.sales import extract_answers_from_assessment_json
+
+        original_answers = _answers(customer_name="客户A")
+        json_str = assess_lead(original_answers).model_dump_json()
+
+        restored = extract_answers_from_assessment_json(json_str)
+        assert restored == original_answers
+
+    def test_modified_loss_band_changes_fee_on_reassess(self) -> None:
+        """Mutating raw_answers.annual_loss_band before reassess → different fee."""
+        from src.sales import extract_answers_from_assessment_json
+
+        original_answers = _answers(annual_loss_band=AnnualLossBand.BETWEEN_50_100W)
+        original_assessment = assess_lead(original_answers)
+        assert original_assessment.recommended_annual_fee_yuan == 80_000.0
+
+        # Sales discovers the customer's loss was higher than first quoted
+        import json
+
+        data = json.loads(original_assessment.model_dump_json())
+        data["raw_answers"]["annual_loss_band"] = "100w_300w"
+        modified_json = json.dumps(data)
+
+        restored = extract_answers_from_assessment_json(modified_json)
+        new = assess_lead(restored)
+        assert new.recommended_annual_fee_yuan == 150_000.0
+        assert new.roi_multiple > original_assessment.roi_multiple
+
+    def test_invalid_json_raises(self) -> None:
+        from src.sales import extract_answers_from_assessment_json
+
+        with pytest.raises(ValueError):
+            extract_answers_from_assessment_json("{not even json")
+
+    def test_assessment_json_missing_raw_answers_raises(self) -> None:
+        """If someone passes a non-LeadAssessment JSON, fail loudly with a useful error."""
+        from src.sales import extract_answers_from_assessment_json
+
+        with pytest.raises(ValueError):
+            extract_answers_from_assessment_json('{"customer_name": "x"}')

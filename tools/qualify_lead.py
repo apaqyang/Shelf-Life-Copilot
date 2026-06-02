@@ -1,17 +1,20 @@
 """Sales lead qualifier — 8-question survey CLI (PRD §12.1).
 
-Two modes:
-  interactive    (default) — prompt sales rep for each answer in terminal
-  --answers PATH           — read answers from JSON, useful for testing /
-                             re-running an old lead's numbers
+Three modes:
+  interactive  (default)  — prompt sales rep for each answer in terminal
+  --answers PATH          — read LeadAnswers from JSON (testing / batch)
+  --reassess PATH         — re-run scoring against a previously written
+                            LeadAssessment JSON (edit raw_answers in place)
 
 Outputs:
   - markdown summary printed to stdout (sales reads immediately)
   - data/leads/<slug>_<YYYYMMDD>.json  for CRM hand-off
+  - data/leads/<slug>_<YYYYMMDD>.pdf   one-pager (unless --no-pdf)
 
 Run:
     uv run python tools/qualify_lead.py
-    uv run python tools/qualify_lead.py --answers data/leads/客户测试.in.json
+    uv run python tools/qualify_lead.py --answers fresh_lead.json
+    uv run python tools/qualify_lead.py --reassess data/leads/客户A_20260601.json
     # or: make qualify
 """
 
@@ -35,6 +38,7 @@ from src.sales import (
     LeadAnswers,
     LeadAssessment,
     assess_lead,
+    extract_answers_from_assessment_json,
     render_lead_pdf,
 )
 from src.sales.report import render_assessment_markdown
@@ -126,6 +130,11 @@ def _load_answers_from_json(path: Path) -> LeadAnswers:
     return LeadAnswers.model_validate(raw)
 
 
+def _load_answers_from_assessment(path: Path) -> LeadAnswers:
+    """Pull raw_answers out of a previously written LeadAssessment JSON."""
+    return extract_answers_from_assessment_json(path.read_text(encoding="utf-8"))
+
+
 # ── Output helpers ────────────────────────────────────────────────────────
 
 
@@ -160,6 +169,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=None,
         help="Path to a JSON file with LeadAnswers (skips interactive prompts).",
+    )
+    p.add_argument(
+        "--reassess",
+        type=Path,
+        default=None,
+        help=(
+            "Path to a previously written LeadAssessment JSON; re-runs scoring "
+            "against its raw_answers (edit a field in the file, then re-run)."
+        ),
     )
     p.add_argument(
         "--output-dir",
@@ -204,7 +222,13 @@ def _write_pdf(
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
 
-    if args.answers is not None:
+    if args.answers is not None and args.reassess is not None:
+        print("--answers and --reassess are mutually exclusive.", file=sys.stderr)
+        return 2
+
+    if args.reassess is not None:
+        answers = _load_answers_from_assessment(args.reassess)
+    elif args.answers is not None:
         answers = _load_answers_from_json(args.answers)
     else:
         answers = _collect_interactive()

@@ -10,7 +10,7 @@ from src.sales.models import (
     PriorityTier,
 )
 from src.sales.pdf import ContactInfo, render_lead_pdf
-from src.sales.qualifier import assess_lead
+from src.sales.qualifier import assess_lead, extract_answers_from_assessment_json
 
 __all__ = [
     "AnnualLossBand",
@@ -22,5 +22,6 @@ __all__ = [
     "LeadAssessment",
     "PriorityTier",
     "assess_lead",
+    "extract_answers_from_assessment_json",
     "render_lead_pdf",
 ]
