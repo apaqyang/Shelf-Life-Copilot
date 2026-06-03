@@ -79,6 +79,28 @@ class TestRenderLeadPdf:
         assert "3" in text and "免费" in text
         assert "试点" in text
 
+    def test_no_emoji_in_pdf_text(self) -> None:
+        """STSong-Light is a CID font that lacks emoji glyphs; using emoji in
+        bullets caused PDFs to render mojibake (e.g. 䰀 instead of ❌). All
+        button-name references must use Chinese brackets like 「同意」."""
+        import re
+
+        pdf = render_lead_pdf(_customer_a_assessment())
+        text = _extract_text(pdf)
+        # Common offenders we previously shipped.
+        for ch in ("✅", "❌", "💬", "📋", "🚨", "⭐"):
+            assert ch not in text, f"emoji {ch!r} leaked into PDF text"
+        # Catch any other emoji/symbol-plane characters that might creep in.
+        emoji_pattern = re.compile(r"[\U0001F000-\U0001FFFF☀-➿]")
+        offenders = emoji_pattern.findall(text)
+        assert offenders == [], f"unexpected emoji in PDF: {offenders}"
+
+    def test_button_names_use_chinese_brackets(self) -> None:
+        pdf = render_lead_pdf(_customer_a_assessment())
+        text = _extract_text(pdf)
+        # The "为什么值得试点" block names the three buttons by 中文 instead of emoji.
+        assert "同意" in text and "稍后" in text and "改方案" in text
+
     def test_contact_info_embedded_when_given(self) -> None:
         contact = ContactInfo(name="王销售", phone="13800138000", email="wang@example.com")
         pdf = render_lead_pdf(_customer_a_assessment(), contact=contact)

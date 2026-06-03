@@ -173,10 +173,12 @@ def _kpi_block(assessment: LeadAssessment, st: dict[str, ParagraphStyle]) -> Tab
 
 
 def _why_pilot_block(st: dict[str, ParagraphStyle]) -> list[Any]:
+    # PDF 用的 STSong-Light 是 CID 字体（Adobe-GB1），不含 emoji glyph。
+    # 用中文方括号代替 emoji，企微卡片那条线路仍保留 emoji（markdown 是另一条渲染链）。
     bullets = [
         "每天 07:00 自动推送临期预警 + AI 处置建议到您手机企微",
-        "您一键 ✅ 同意 / ❌ 稍后 / 💬 改方案 — 总监决策 1 秒完成",
-        "✅ 同意自动派单到车间，全程留决策日志可审计",
+        "您一键「同意」/「稍后」/「改方案」— 总监决策 1 秒完成",
+        "「同意」后自动派单到车间，全程留决策日志可审计",
         "3 个月后给您完整数据看板：节省总额、ROI、最佳动作 — 看不到效果可退",
     ]
     return [
