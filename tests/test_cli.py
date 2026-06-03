@@ -860,6 +860,23 @@ class TestBuildProvider:
         assert result is None
         assert "MOONSHOT_API_KEY" in capsys.readouterr().err
 
+    def test_offline_needs_no_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The whole point of 包 A: offline runs zero-config."""
+        from src.suggestion import OfflineLLMProvider
+
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        provider = _build_provider("offline", None)
+        assert isinstance(provider, OfflineLLMProvider)
+
+    def test_missing_key_error_message_mentions_offline(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When a key is missing, point the user at the offline escape hatch."""
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        _build_provider("anthropic", None)
+        assert "offline" in capsys.readouterr().err
+
 
 class TestMainMissingApiKey:
     @pytest.mark.asyncio

@@ -1,0 +1,53 @@
+# 镜像构建上下文裁剪 — 拷过去之前先剔掉本地开发产物
+
+# Python / virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*.egg-info/
+build/
+dist/
+
+# 测试 / 覆盖率
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+coverage.xml
+htmlcov/
+tests/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# git
+.git/
+.gitignore
+.github/
+
+# 销售 / 决策日志数据（敏感）
+data/leads/
+*.db
+*.sqlite
+*.sqlite3
+
+# 文档不进运行时镜像（占空间且无业务影响）
+docs/PRD.md
+docs/TECH_SPEC.md
+docs/ARCHITECTURE.md
+docs/RUNBOOK_DEMO.md
+docs/DEMO_SCRIPT.md
+docs/FALLBACK_VIDEO.md
+docs/TODO.md
+
+# 容器化产物
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Claude / 本地工具
+.claude/
