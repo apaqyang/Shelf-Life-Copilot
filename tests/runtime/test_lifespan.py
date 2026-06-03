@@ -100,6 +100,13 @@ class TestLifespanWithLlmKey:
         for _ in _make_client(app):
             assert app.state.daily_scheduler is not None
 
+    def test_offline_provider_starts_daily_scheduler(self, base_settings: Settings) -> None:
+        """offline mode is a valid llm_provider choice for the zero-config demo."""
+        settings = base_settings.model_copy(update={"llm_provider": "offline"})
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert app.state.daily_scheduler is not None  # NOT None, even sans key
+
     def test_webhook_url_uses_real_client(self, base_settings: Settings) -> None:
         """When WECOM_WEBHOOK_URL is set, the WeCom client must be WebhookWecomClient."""
         from src.wecom import WebhookWecomClient

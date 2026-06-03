@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     wecom_webhook_url: str | None = None
 
     # ── LLM provider ──────────────────────────────────────────────────────
-    llm_provider: Literal["anthropic", "moonshot"] = "anthropic"
+    # `offline` is the zero-config demo provider (no API key). Real deployments
+    # set ANTHROPIC_API_KEY / MOONSHOT_API_KEY and flip llm_provider accordingly.
+    llm_provider: Literal["anthropic", "moonshot", "offline"] = "anthropic"
     anthropic_api_key: str | None = None
     moonshot_api_key: str | None = None
 
@@ -86,7 +88,13 @@ class Settings(BaseSettings):
 
     @property
     def active_llm_key(self) -> str | None:
-        """The API key for the *currently selected* provider — or None if absent."""
+        """The API key for the *currently selected* provider — or None if absent.
+
+        offline mode needs no key, so returns a sentinel non-None string so the
+        lifespan doesn't treat it as a misconfiguration.
+        """
+        if self.llm_provider == "offline":
+            return "offline-no-key-needed"
         if self.llm_provider == "anthropic":
             return self.anthropic_api_key
         return self.moonshot_api_key

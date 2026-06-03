@@ -41,12 +41,13 @@ from src.suggestion import (
     SuggestionEngine,
     build_anthropic_provider,
     build_moonshot_provider,
+    build_offline_provider,
 )
 from src.wecom import DryRunWecomClient, WebhookWecomClient, WecomClient
 
 _DEFAULT_DB_PATH = "data/decisions.db"
 
-_PROVIDER_CHOICES = ("anthropic", "moonshot")
+_PROVIDER_CHOICES = ("anthropic", "moonshot", "offline")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -167,12 +168,17 @@ def _build_wecom_client(webhook_url: str | None) -> WecomClient:
 
 def _build_provider(provider_name: str, model: str | None) -> LLMProvider | None:
     """Return a configured LLMProvider, or None if the required API key is missing."""
+    if provider_name == "offline":
+        # Zero-config demo path — no API key, no signup. Same Protocol as the
+        # real providers so SuggestionEngine doesn't branch on this.
+        return build_offline_provider()
     if provider_name == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             print(
                 "ANTHROPIC_API_KEY not set. Pass --dry-run to skip LLM calls, "
-                "or use --provider moonshot with MOONSHOT_API_KEY.",
+                "use --provider moonshot with MOONSHOT_API_KEY, "
+                "or use --provider offline for a zero-config demo.",
                 file=sys.stderr,
             )
             return None
@@ -181,7 +187,8 @@ def _build_provider(provider_name: str, model: str | None) -> LLMProvider | None
     api_key = os.environ.get("MOONSHOT_API_KEY")
     if not api_key:
         print(
-            "MOONSHOT_API_KEY not set. Get one from https://platform.moonshot.cn/console/api-keys.",
+            "MOONSHOT_API_KEY not set. Get one from https://platform.moonshot.cn/console/api-keys "
+            "— or use --provider offline for a zero-config demo.",
             file=sys.stderr,
         )
         return None

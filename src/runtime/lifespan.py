@@ -34,6 +34,7 @@ from src.suggestion import (
     SuggestionEngine,
     build_anthropic_provider,
     build_moonshot_provider,
+    build_offline_provider,
 )
 from src.wecom import (
     DryRunWecomClient,
@@ -48,6 +49,8 @@ logger = logging.getLogger(__name__)
 
 def _build_provider(settings: Settings) -> LLMProvider | None:
     """Construct the LLM provider for the configured key, or None if missing."""
+    if settings.llm_provider == "offline":
+        return build_offline_provider()
     if settings.active_llm_key is None:
         return None
     if settings.llm_provider == "anthropic":

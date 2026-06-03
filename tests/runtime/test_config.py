@@ -115,6 +115,16 @@ class TestActiveLLMKey:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.active_llm_key is None
 
+    def test_offline_provider_returns_sentinel_not_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """offline mode is a legit production choice — lifespan must not skip it."""
+        monkeypatch.setenv("LLM_PROVIDER", "offline")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.active_llm_key is not None  # truthy sentinel, not a real key
+
 
 class TestValidation:
     def test_invalid_hour_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:

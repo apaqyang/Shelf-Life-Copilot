@@ -1,0 +1,37 @@
+# Shelf-Life Copilot · 零配置自助试用编排文件
+#
+# 用法：
+#   docker compose up           # 起服务（offline 模式，不需要任何 key）
+#   docker compose exec app make demo            # 渲染示例卡片
+#   docker compose exec app make qualify         # 跑销售线索评估问卷
+#   docker compose down                          # 停服务
+#
+# 切换到真实 LLM：在仓库根目录建 .env 文件，填入 ANTHROPIC_API_KEY 或
+# MOONSHOT_API_KEY，把 LLM_PROVIDER 改成 anthropic / moonshot。
+
+services:
+  app:
+    build: .
+    container_name: shelf-life-copilot
+    ports:
+      - "8000:8000"
+    environment:
+      # 默认 offline；如需切换，把这几行删掉，改用 env_file 注入真实 key
+      LLM_PROVIDER: offline
+      APP_ENV: demo
+      LOG_LEVEL: INFO
+    env_file:
+      # .env 不存在时 docker compose v2 自动跳过；本地 export 的 env 仍生效
+      - path: .env
+        required: false
+    volumes:
+      # 把 data/ 挂出来 — 客户能看到自己的批次 / 决策日志 / 报告 PDF
+      - ./data:/app/data
+      - ./docs/demo_samples:/app/docs/demo_samples
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

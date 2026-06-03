@@ -12,6 +12,7 @@ LLM vendor-specifics are allowed to leak through.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Protocol, cast, runtime_checkable
 
 from anthropic import AsyncAnthropic
@@ -182,3 +183,69 @@ def build_moonshot_provider(api_key: str, model: str = MOONSHOT_DEFAULT_MODEL) -
         client=AsyncOpenAI(api_key=api_key, base_url=MOONSHOT_BASE_URL),
         model=model,
     )
+
+
+# ── Offline provider (no LLM API call) ──────────────────────────────────────
+
+
+OFFLINE_MODEL_NAME = "offline-demo"
+_OFFLINE_SAVINGS_ESTIMATE = 8000.0
+_OFFLINE_CONFIDENCE = 0.80
+_OFFLINE_RATIONALE = (
+    "演示模式（offline）：建议基于历史同类批次的均值估算，"
+    "无 LLM 实时调用。接 ANTHROPIC_API_KEY / MOONSHOT_API_KEY 后切换为真实推理。"
+)
+
+
+class OfflineLLMProvider:
+    """Deterministic stand-in for the real LLM providers — zero-config 5-min demo.
+
+    Picks the first enabled_action from the tool schema so is_standard=True,
+    fills the rest with plausible-but-clearly-mock numbers. The whole point of
+    Open Core "packet A" is that a food-plant IT lead can `docker-compose up`
+    and see real cards without signing up for any LLM API.
+    """
+
+    @property
+    def model_name(self) -> str:
+        return OFFLINE_MODEL_NAME
+
+    # The full ActionType enum is what build_suggestion_tool puts in action.enum,
+    # but we want only *enabled* actions. Those live in the action.description as
+    # "customer-enabled actions: [a, b]". Parsing that string is brittle by design —
+    # if the schema ever stops carrying this prefix, tests break loudly.
+    _ENABLED_RE = re.compile(r"customer-enabled actions:\s*\[([^\]]+)\]")
+
+    async def call_with_tool(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        tool_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            description = tool_schema["input_schema"]["properties"]["action"]["description"]
+        except (KeyError, TypeError) as exc:
+            raise LLMProviderError(
+                f"offline provider couldn't read action.description from tool schema: {exc}"
+            ) from exc
+
+        match = self._ENABLED_RE.search(description)
+        if match is None:
+            raise LLMProviderError(
+                "offline provider couldn't find enabled-actions hint in tool description"
+            )
+        enabled = [a.strip() for a in match.group(1).split(",") if a.strip()]
+        if not enabled:
+            raise LLMProviderError("offline provider needs at least one enabled action")
+
+        return {
+            "action": enabled[0],
+            "savings_estimate": _OFFLINE_SAVINGS_ESTIMATE,
+            "rationale": _OFFLINE_RATIONALE,
+            "confidence": _OFFLINE_CONFIDENCE,
+        }
+
+
+def build_offline_provider() -> OfflineLLMProvider:
+    """Zero-arg constructor — there's nothing to configure."""
+    return OfflineLLMProvider()
