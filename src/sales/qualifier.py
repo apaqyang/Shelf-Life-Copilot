@@ -38,11 +38,15 @@ _LOSS_ESTIMATE_BY_BAND: dict[AnnualLossBand, float] = {
     AnnualLossBand.OVER_300W: 4_000_000.0,  # 400 万 conservative anchor
 }
 
-# Pitch lines lifted from PRD §12.1's sales-script table.
+# Pitch lines — PRD §12.1 sales-script table, white-language rewrite of the
+# original "X% / 降 Y% / 回本 N 倍" abstract phrasing. The numbers are sales-
+# script ceilings (full-adoption case): 减损率 30%, no 60% adoption discount —
+# that discount lives in the PDF's `roi_multiple` row, which is the honest
+# floor we'll be held to in PoC.
 _PITCH_BY_BAND: dict[AnnualLossBand, str] = {
-    AnnualLossBand.UNDER_50W: '"相当于年损的 8-10%，AI 帮您降 30% 就回本 5-6 倍"',
-    AnnualLossBand.BETWEEN_50_100W: '"相当于年损的 8-10%，AI 帮您降 30% 就回本 5-6 倍"',
-    AnnualLossBand.BETWEEN_100_300W: '"相当于年损的 5-8%，降 30% 回本 4-6 倍"',
+    AnnualLossBand.UNDER_50W: "您每年付 8 万，AI 帮您从 100 万以内报损里抠回 15-30 万 — 净赚 2-4 倍",
+    AnnualLossBand.BETWEEN_50_100W: "您每年付 8 万，AI 帮您从 100 万以内报损里抠回 15-30 万 — 净赚 2-4 倍",
+    AnnualLossBand.BETWEEN_100_300W: "您每年付 15 万，AI 帮您从 200-300 万报损里抠回 60-90 万 — 净赚 4-6 倍",
     AnnualLossBand.OVER_300W: "走单独 ROI 测算 + 高管对接（议价起步 25 万）",
 }
 

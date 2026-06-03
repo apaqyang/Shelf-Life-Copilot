@@ -225,14 +225,29 @@ class TestRecommendedActions:
 
 
 class TestSalesPitch:
-    """Pitch line should match the PRD table verbatim (sales reads it on-screen)."""
+    """Pitch line should match the PRD table verbatim (sales reads it on-screen).
 
-    def test_under_100w_pitch_mentions_5_to_6_x(self) -> None:
+    White-language rewrite: "年付 X 万 / 抠回 Y 万 / 净赚 Z 倍" instead of the
+    original abstract "X% / 降 30% / 回本 N 倍". Same numbers under the hood,
+    just spelled out so a director hears it the way an accountant would.
+    """
+
+    def test_under_100w_pitch_mentions_fee_savings_multiple(self) -> None:
         a = assess_lead(_answers(annual_loss_band=AnnualLossBand.UNDER_50W))
-        assert "8-10%" in a.sales_pitch
+        assert "8 万" in a.sales_pitch
+        assert "15-30 万" in a.sales_pitch
+        assert "2-4 倍" in a.sales_pitch
+
+    def test_50_100w_pitch_same_as_under_50w_band(self) -> None:
+        """PRD groups both into a single '< 100 万' fee tier, so pitch matches."""
+        a = assess_lead(_answers(annual_loss_band=AnnualLossBand.BETWEEN_50_100W))
+        assert "8 万" in a.sales_pitch
+        assert "2-4 倍" in a.sales_pitch
 
     def test_100_300w_pitch_mentions_4_to_6_x(self) -> None:
         a = assess_lead(_answers(annual_loss_band=AnnualLossBand.BETWEEN_100_300W))
+        assert "15 万" in a.sales_pitch
+        assert "60-90 万" in a.sales_pitch
         assert "4-6 倍" in a.sales_pitch
 
     def test_over_300w_pitch_mentions_roi_path(self) -> None:
