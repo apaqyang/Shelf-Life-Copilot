@@ -149,11 +149,13 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 | 文档 | 看什么 |
 |---|---|
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | **食品厂 IT 主管 5 分钟试用指南**（含 FAQ） |
+| [docs/blog/](docs/blog/) | **博客**：行业洞察、案例拆解、ROI 测算（深度长文） |
 | [docs/PRD.md](docs/PRD.md) | 产品规格、模块设计、商业模式、销售工具 |
 | [docs/TECH_SPEC.md](docs/TECH_SPEC.md) | 技术架构、数据模型、接口设计 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 / 依赖图 / 设计决策记录 |
 | [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | 5 分钟现场 Demo 脚本（含 A/B 双场景 + FAQ 8 题） |
 | [docs/RUNBOOK_DEMO.md](docs/RUNBOOK_DEMO.md) | 演前 30 分钟操作 + 三层降级方案 |
+| [docs/MARKETING.md](docs/MARKETING.md) | 内容营销 SOP（团队内部，关键词 / 渠道 / 节奏） |
 | [docs/TODO.md](docs/TODO.md) | 当前进度 + 验收清单 |
 | [docs/demo_samples/](docs/demo_samples/) | 现成的卡片样本 + 月度 PDF 报告 |
 
