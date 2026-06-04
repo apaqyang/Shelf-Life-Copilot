@@ -26,11 +26,13 @@
 - ✅ **销售线索评估工具（PRD §12.1）**：`src/sales/` Pydantic 模型 + `assess_lead()` 业务规则（分档 / 优先级 / 推荐动作 / ROI / 销售话术 全部 PRD 原文）+ `tools/qualify_lead.py` 交互式 CLI + `make qualify`。客户 A smoke：⭐⭐⭐ · 15 万年费 · ROI 2.4x。
 - ✅ **ROI 一页纸 PDF**：`src/sales/render_lead_pdf` 单页 A4（4 大 KPI / 试点说服段 / 动作 / 销售联系名片）+ CLI `--contact-name/phone/email` + `--no-pdf` 开关。客户 A 端到端：JSON 留档 + PDF 同时出。
 - ✅ **包 A · Open Core 自助试用化**：`OfflineLLMProvider` 零配置 demo（无 API key）+ Dockerfile + docker-compose.yml + .dockerignore + LICENSE 改 AGPL-3.0 + README 改 5 分钟试用导向 + `docs/QUICKSTART.md` 食品厂 IT 主管 FAQ。`docker compose up` 一键起完整服务（offline 模式 daily/monthly scheduler 都跑）。
+- ✅ **包 B · 内容营销基础设施**：`docs/blog/` 目录 + 首篇深度博文《150 万年损是怎么飞掉的》(2500 字案例拆解) + 博客写作 SOP / SEO checklist / 选题清单 + `docs/MARKETING.md` 关键词清单 + 3 层推广渠道清单 + GitHub About/Topics 配置清单。
 - ⏳ **路径 B 加解密 + 签名校验**：需客户 corp_secret，PoC 启动时单独 PR
 - ⏳ **路径 B 文字反馈 → LLM 自动重生成**：需会话状态管理，v0.2 范围
 - ⏳ **Demo 内部彩排 ≥ 2 次 + 兜底视频录制**（需多人）
+- ⏳ **GitHub About / Topics 网页端配置**（手动操作，见 `docs/MARKETING.md` §⚙️）
 
-**当前指标**：404 测试 passed · 覆盖率 100% · 22+ commits · CI 全绿
+**当前指标**：404 测试 passed · 覆盖率 100% · 23+ commits · CI 全绿
 **仓库**：https://github.com/apaqyang/Shelf-Life-Copilot
 
 ---
