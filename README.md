@@ -13,30 +13,39 @@
 
 ## 📸 长这样
 
+### 📱 企微卡片 · 总监手机端
+
+每天早 7:00 推送，3 秒看懂；一键 ✅同意 / ❌稍后 / 💬改方案，同意后自动派工单到车间，非标准动作自动加「需人工复核」标签。
+
 <table>
 <tr>
-<td width="40%" valign="top">
-
-**企微卡片直送总监手机**
-
-每天早 7:00 推送，3 秒看懂：哪个批次、剩几天、建议怎么处置、能省多少钱。总监直接点 ✅同意 / ❌稍后 / 💬改方案，非标准动作自动加「需人工复核」标签。
-
-</td>
-<td width="60%" valign="top">
-
-**月度 PDF 报告 · 总监转给老板的汇报材料**
-
-累计节省、AI 采纳率、Top5 高频处置类型、ROI 测算，一页纸说清"这季度帮你省了多少"。
-
-</td>
+<td width="50%"><img src="docs/assets/wecom-card.jpg" alt="临期预警卡片"></td>
+<td width="50%"><img src="docs/assets/wecom-workorder.jpg" alt="改方案 + 自动派工单"></td>
 </tr>
 <tr>
-<td width="40%" valign="top"><img src="docs/assets/wecom-card.jpg" alt="企微临期预警卡片"></td>
-<td width="60%" valign="top"><img src="docs/assets/monthly-report-top-actions.png" alt="月度报告 · Top5 高频处置类型"></td>
+<td align="center"><sub>① 早 7:00 临期预警 + AI 处置建议 + 节省估算</sub></td>
+<td align="center"><sub>② 总监「改方案」→ 自动生成工单派到车间</sub></td>
 </tr>
 </table>
 
-> 上图为 offline 演示模式（mock 数据）渲染效果，零配置即可在本机复现，见下方「5 分钟自助试用」。
+### 📄 月度 PDF 报告 · 总监转给老板的汇报材料
+
+封面大字突出累计节省，后面是 Top5 高频处置类型 + ROI 测算明细，一页纸说清"这个月帮你省了多少"。
+
+<table>
+<tr>
+<td width="34%"><img src="docs/assets/monthly-report-cover.png" alt="月度报告封面 · 累计节省 + ROI"></td>
+<td width="33%"><img src="docs/assets/monthly-report-top-actions.png" alt="Top5 高频处置类型"></td>
+<td width="33%"><img src="docs/assets/monthly-report-roi.png" alt="ROI 测算明细"></td>
+</tr>
+<tr>
+<td align="center"><sub>封面：本月累计节省 ¥82,700 · ROI 6.6×</sub></td>
+<td align="center"><sub>Top5：AI 都在做哪些处置</sub></td>
+<td align="center"><sub>ROI 测算：投入 vs 节省一页讲清</sub></td>
+</tr>
+</table>
+
+> 以上为 offline 演示模式（mock 数据）渲染效果，`docker compose up` 零配置即可在本机复现，见下方「5 分钟自助试用」。
 
 ---
 
