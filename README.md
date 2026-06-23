@@ -11,6 +11,35 @@
 
 ---
 
+## 📸 长这样
+
+<table>
+<tr>
+<td width="40%" valign="top">
+
+**企微卡片直送总监手机**
+
+每天早 7:00 推送，3 秒看懂：哪个批次、剩几天、建议怎么处置、能省多少钱。总监直接点 ✅同意 / ❌稍后 / 💬改方案，非标准动作自动加「需人工复核」标签。
+
+</td>
+<td width="60%" valign="top">
+
+**月度 PDF 报告 · 总监转给老板的汇报材料**
+
+累计节省、AI 采纳率、Top5 高频处置类型、ROI 测算，一页纸说清"这季度帮你省了多少"。
+
+</td>
+</tr>
+<tr>
+<td width="40%" valign="top"><img src="docs/assets/wecom-card.jpg" alt="企微临期预警卡片"></td>
+<td width="60%" valign="top"><img src="docs/assets/monthly-report-top-actions.png" alt="月度报告 · Top5 高频处置类型"></td>
+</tr>
+</table>
+
+> 上图为 offline 演示模式（mock 数据）渲染效果，零配置即可在本机复现，见下方「5 分钟自助试用」。
+
+---
+
 ## 🚀 5 分钟自助试用（零配置）
 
 不需要 Anthropic / KIMI API key，不需要企业微信管理员，不需要任何注册。
