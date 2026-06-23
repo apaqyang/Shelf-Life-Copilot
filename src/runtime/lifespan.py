@@ -19,6 +19,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from fastapi import FastAPI
 
 from src.persistence import SuggestionStore
+from src.plugins import PluginRegistry, load_plugins
 from src.reports import ReportRunResult
 from src.runtime.config import Settings
 from src.scheduler import (
@@ -114,6 +115,14 @@ def build_lifespan(
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+        registry = PluginRegistry(app=app, settings=settings)
+        load_plugins(registry)
+        app.state.loaded_plugins = registry.loaded
+        if registry.loaded:
+            logger.info("Enterprise plugins loaded: %s", registry.loaded)
+        else:
+            logger.info("Pure open-source mode (no enterprise plugins).")
+
         wecom_client = _build_wecom_client(settings)
 
         monthly = MonthlyReportScheduler(
