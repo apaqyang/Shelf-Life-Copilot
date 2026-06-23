@@ -37,6 +37,20 @@ def _extract_text(pdf_bytes: bytes) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
+class TestSeparatorGlyph:
+    """STSong-Light lacks U+00B7 (·) → tofu (□). We sanitize it to U+30FB (・),
+    covering both hardcoded separators and a customer name that contains '·'
+    (the fixture's customer_name does)."""
+
+    def test_no_tofu_middle_dot(self) -> None:
+        text = _extract_text(render_lead_pdf(_customer_a_assessment()))
+        assert "·" not in text
+
+    def test_uses_katakana_middle_dot(self) -> None:
+        text = _extract_text(render_lead_pdf(_customer_a_assessment()))
+        assert "・" in text
+
+
 class TestRenderLeadPdf:
     def test_returns_bytes_starting_with_pdf_magic(self) -> None:
         pdf = render_lead_pdf(_customer_a_assessment())

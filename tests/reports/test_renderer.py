@@ -144,6 +144,22 @@ class TestPdfContent:
         assert "17,000" in _extract_text(pdf)
 
 
+class TestSeparatorGlyph:
+    """STSong-Light lacks U+00B7 (·) → it renders as tofu (□).
+
+    We use U+30FB (・, katakana middle dot), which the CID font does carry and
+    which looks all but identical. Guard against the tofu regressing back in.
+    """
+
+    def test_no_tofu_middle_dot_u00b7(self, report_data: MonthlyReportData) -> None:
+        text = _extract_text(render_monthly_report_pdf(report_data))
+        assert "·" not in text
+
+    def test_uses_katakana_middle_dot_u30fb(self, report_data: MonthlyReportData) -> None:
+        text = _extract_text(render_monthly_report_pdf(report_data))
+        assert "・" in text
+
+
 class TestEmptyData:
     def test_empty_report_still_renders(self) -> None:
         data = aggregate_monthly_report(

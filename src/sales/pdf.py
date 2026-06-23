@@ -33,6 +33,17 @@ from src.sales.models import IndustryCategory, LeadAssessment
 
 _CHINESE_FONT = "STSong-Light"
 
+# STSong-Light (Adobe-GB1 CID) lacks U+00B7 (·) → it renders as tofu (□). Swap
+# any occurrence — hardcoded separators *or* a customer-typed name — for U+30FB
+# (・), which the font does carry and which looks all but identical.
+_PDF_SAFE_MAP = str.maketrans({"·": "・"})
+
+
+def _safe(text: str) -> str:
+    """Drop glyphs STSong-Light can't draw, so nothing renders as tofu."""
+    return text.translate(_PDF_SAFE_MAP)
+
+
 # Chinese display labels — mirrors src/reports/renderer.py for consistency
 _ACTION_LABEL: dict[str, str] = {
     ActionType.TRANSFORM.value: "转加工",
@@ -197,7 +208,7 @@ def _actions_block(assessment: LeadAssessment, st: dict[str, ParagraphStyle]) ->
 
 def _pitch_block(assessment: LeadAssessment, st: dict[str, ParagraphStyle]) -> Paragraph:
     return Paragraph(
-        f"▎销售一句话：{assessment.sales_pitch}",
+        _safe(f"▎销售一句话：{assessment.sales_pitch}"),
         st["body"],
     )
 
@@ -215,7 +226,7 @@ def _contact_block(contact: ContactInfo | None, st: dict[str, ParagraphStyle]) -
         lines.append(f"邮箱：{contact.email}")
     return [
         Paragraph("▎联系方式", st["h2"]),
-        Paragraph(" · ".join(lines), st["body"]),
+        Paragraph(_safe(" · ".join(lines)), st["body"]),
     ]
 
 
@@ -250,10 +261,12 @@ def render_lead_pdf(
     )
 
     story: list[Any] = [
-        Paragraph("Shelf-Life Copilot · ROI 评估", st["title"]),
+        Paragraph(_safe("Shelf-Life Copilot · ROI 评估"), st["title"]),
         Paragraph(
-            f"客户：{assessment.customer_name} · 行业：{industry_label} · "
-            f"评估日期：{assessment.assessed_at.strftime('%Y-%m-%d')}",
+            _safe(
+                f"客户：{assessment.customer_name} · 行业：{industry_label} · "
+                f"评估日期：{assessment.assessed_at.strftime('%Y-%m-%d')}"
+            ),
             st["subtitle"],
         ),
         Spacer(1, 0.5 * cm),

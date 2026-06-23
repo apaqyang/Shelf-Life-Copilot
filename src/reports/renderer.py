@@ -96,10 +96,10 @@ def _styles() -> dict[str, ParagraphStyle]:
 def _cover(data: MonthlyReportData, st: dict[str, ParagraphStyle]) -> list[Any]:
     return [
         Spacer(1, 3 * cm),
-        Paragraph("Shelf-Life Copilot · 月度复盘", st["title"]),
+        Paragraph("Shelf-Life Copilot ・ 月度复盘", st["title"]),
         Spacer(1, 0.5 * cm),
         Paragraph(
-            f"客户：{data.customer_id} · 行业：{data.industry} · 月份：{data.month}",
+            f"客户：{data.customer_id} ・ 行业：{data.industry} ・ 月份：{data.month}",
             st["body"],
         ),
         Spacer(1, 3 * cm),
@@ -108,8 +108,8 @@ def _cover(data: MonthlyReportData, st: dict[str, ParagraphStyle]) -> list[Any]:
         Spacer(1, 0.8 * cm),
         Paragraph(
             f"AI 建议采纳 {data.approved_count} / {data.total_count} 次 "
-            f"· 采纳率 {data.approval_rate:.0%} "
-            f"· ROI {data.roi_multiple:.1f}×",
+            f"・ 采纳率 {data.approval_rate:.0%} "
+            f"・ ROI {data.roi_multiple:.1f}×",
             st["callout"],
         ),
         PageBreak(),
@@ -178,9 +178,9 @@ def _case_studies_section(data: MonthlyReportData, st: dict[str, ParagraphStyle]
         date_str = d.decided_at.date().isoformat()
         action_label = _ACTION_LABEL.get(d.action, d.action.value)
         body = (
-            f"<b>案例 {i} · {d.material_name}</b><br/>"
-            f"批次：{d.batch_id} · 决策日期：{date_str} · 动作：{action_label}<br/>"
-            f"预估节省：¥{d.savings_estimate:,.0f} · 实际节省：¥{(d.actual_savings or 0):,.0f} · "
+            f"<b>案例 {i} ・ {d.material_name}</b><br/>"
+            f"批次：{d.batch_id} ・ 决策日期：{date_str} ・ 动作：{action_label}<br/>"
+            f"预估节省：¥{d.savings_estimate:,.0f} ・ 实际节省：¥{(d.actual_savings or 0):,.0f} ・ "
             f"实际处置量：{(d.actual_qty or 0):,.0f}"
         )
         elements.append(Paragraph(body, st["body"]))
@@ -249,7 +249,7 @@ def render_monthly_report_pdf(data: MonthlyReportData) -> bytes:
         rightMargin=2 * cm,
         topMargin=2 * cm,
         bottomMargin=2 * cm,
-        title=f"Shelf-Life Copilot 月报 · {data.customer_id} · {data.month}",
+        title=f"Shelf-Life Copilot 月报 ・ {data.customer_id} ・ {data.month}",
         author="Shelf-Life Copilot",
     )
     st = _styles()
