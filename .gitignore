@@ -63,3 +63,6 @@ plugins/enterprise/
 
 # Distribution artifacts
 node_modules/
+
+# 临时图片暂存（截图原件，归档到 docs/assets 后即可删）
+imagetemp/
