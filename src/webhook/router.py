@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
 from src.persistence import DecisionStore, SuggestionStore
+from src.webhook.crypto import get_webhook_crypto
 from src.webhook.handlers import (
     UnknownActionError,
     UnknownBatchError,
@@ -53,11 +54,12 @@ def get_suggestion_store() -> SuggestionStore:
 async def verify_url(echostr: Annotated[str, Query(...)]) -> str:
     """WeCom URL verification handshake.
 
-    v0.1 echoes `echostr` verbatim — production must decrypt it with corp_secret
-    before echoing (WeCom callback security spec). Without crypto this endpoint
-    is only safe behind a private network / VPN, which matches v0.1 self-testing.
+    Goes through the WebhookCrypto seam: v0.1 PlaintextCrypto echoes `echostr`
+    verbatim, while the enterprise AES plugin decrypts it with corp_secret first
+    (WeCom callback security spec). Without crypto this endpoint is only safe
+    behind a private network / VPN, which matches v0.1 self-testing.
     """
-    return echostr
+    return get_webhook_crypto().verify_url(echostr)
 
 
 @router.post("/webhook/wecom")

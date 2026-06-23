@@ -149,6 +149,41 @@ class TestSchedulerLifecycleHooks:
         mock_daily.shutdown.assert_called_once()
 
 
+class TestPluginSeam:
+    """The lifespan loads enterprise plugins, defaulting to pure open-source mode."""
+
+    def test_pure_oss_mode_when_no_plugins(
+        self, base_settings: Settings, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO, logger="src.runtime.lifespan")
+        app = FastAPI(lifespan=build_lifespan(base_settings))
+        for _ in _make_client(app):
+            assert app.state.loaded_plugins == []
+        assert any("open-source mode" in r.message for r in caplog.records)
+
+    def test_loaded_plugins_logged(
+        self,
+        base_settings: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        from pathlib import Path
+
+        from src.plugins import PluginRegistry
+        from src.runtime import lifespan as ls_mod
+
+        def fake_load(registry: PluginRegistry, plugins_root: Path | None = None) -> list[str]:
+            registry.loaded.append("erp_sap")
+            return registry.loaded
+
+        monkeypatch.setattr(ls_mod, "load_plugins", fake_load)
+        caplog.set_level(logging.INFO, logger="src.runtime.lifespan")
+        app = FastAPI(lifespan=build_lifespan(base_settings))
+        for _ in _make_client(app):
+            assert app.state.loaded_plugins == ["erp_sap"]
+        assert any("Enterprise plugins loaded" in r.message for r in caplog.records)
+
+
 class TestPushCallbacks:
     """Default callbacks push to the configured WeCom client (Webhook or DryRun)."""
 

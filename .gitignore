@@ -58,5 +58,8 @@ logs/
 # Sales lead artifacts (含客户姓名/电话/年损金额等敏感商务数据，不入仓库)
 data/leads/
 
+# Enterprise plugins (Open Core 边界：企业版闭源代码绝不进开源仓库)
+plugins/enterprise/
+
 # Distribution artifacts
 node_modules/
