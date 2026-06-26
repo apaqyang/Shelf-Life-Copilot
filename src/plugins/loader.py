@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -27,14 +28,29 @@ DEFAULT_PLUGINS_ROOT = Path(__file__).resolve().parents[2] / "plugins"
 
 
 def _import_package(name: str, init_path: Path) -> ModuleType | None:
-    """Import a plugin package from its __init__.py path, or None on failure."""
+    """Import a plugin *package* from its __init__.py path, or None on failure.
+
+    `submodule_search_locations` + registering the module in `sys.modules` make
+    the package's own relative imports (`from .repository import ...`) resolve,
+    so a real plugin can span repository.py / client.py / config.py rather than
+    being crammed into one file.
+    """
     module_name = f"sl_enterprise_plugin_{name}"
-    spec = importlib.util.spec_from_file_location(module_name, init_path)
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        init_path,
+        submodule_search_locations=[str(init_path.parent)],
+    )
     if spec is None or spec.loader is None:  # pragma: no cover - importlib edge case
         logger.warning("Could not build import spec for plugin %r at %s", name, init_path)
         return None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module  # so `from .x import y` finds the parent
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 
