@@ -74,3 +74,36 @@ class TestLoading:
         (ent / "notapkg").mkdir(parents=True)  # no __init__.py
         (ent / "notapkg" / "readme.txt").write_text("x", encoding="utf-8")
         assert load_plugins(_registry(), plugins_root=tmp_path) == []
+
+    def test_loads_package_plugin_with_submodule(self, tmp_path: Path) -> None:
+        """A real plugin spans multiple files; relative imports must resolve."""
+        pkg = tmp_path / "enterprise" / "erp_demo"
+        pkg.mkdir(parents=True)
+        (pkg / "helper.py").write_text("VALUE = 42\n", encoding="utf-8")
+        (pkg / "__init__.py").write_text(
+            textwrap.dedent(
+                """
+                from .helper import VALUE
+
+                def register(registry):
+                    registry.app.state.helper_value = VALUE
+                """
+            ),
+            encoding="utf-8",
+        )
+        registry = _registry()
+        loaded = load_plugins(registry, plugins_root=tmp_path)
+        assert loaded == ["erp_demo"]
+        assert registry.app.state.helper_value == 42
+
+    def test_plugin_that_raises_on_import_propagates_and_unregisters(
+        self, tmp_path: Path
+    ) -> None:
+        """A broken plugin fails loud (paying customer must see it), and we don't
+        leave a half-initialised module in sys.modules."""
+        import sys
+
+        _write_plugin(tmp_path / "enterprise", "kaboom", "raise RuntimeError('boom')\n")
+        with pytest.raises(RuntimeError, match="boom"):
+            load_plugins(_registry(), plugins_root=tmp_path)
+        assert "sl_enterprise_plugin_kaboom" not in sys.modules
