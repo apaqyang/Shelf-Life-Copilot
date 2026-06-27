@@ -26,3 +26,11 @@ repos:
         additional_dependencies:
           - pydantic>=2.9
           - fastapi>=0.115
+
+  - repo: local
+    hooks:
+      - id: no-internal-leak
+        name: 拦截对内/营销/销售材料进公开仓库
+        entry: python3 tools/check_no_internal_leak.py
+        language: system
+        pass_filenames: true
