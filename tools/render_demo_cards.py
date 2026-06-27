@@ -1,8 +1,8 @@
 """Offline demo card renderer — produces deterministic markdown for rehearsal / fallback.
 
 Why this is a tool, not a CLI flag:
-- It bakes in DEMO_SCRIPT.md's exact phrasing for the suggestion text (so the
-  cards on stage match what the presenter is reading).
+- It uses deterministic, hardcoded phrasing for the suggestion text (no LLM),
+  so the rendered cards are stable across runs.
 - It does not call Claude. It does not need an API key. It does not touch WeCom.
 - Output is committed to docs/demo_samples/ — print it out, open it on a backup
   laptop, screenshot it for a fallback video.
@@ -192,8 +192,6 @@ def render_customer(scenario: DemoScenario) -> str:
         f"## 1. 预警卡片（headline batch = {scenario.headline_batch_id}）",
         "",
         primary_card.markdown,
-        "",
-        "**主讲台词**：参见 [DEMO_SCRIPT.md](../DEMO_SCRIPT.md) §1:00-3:00。",
         "",
         "---",
         "",

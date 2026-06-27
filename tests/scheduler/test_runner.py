@@ -237,7 +237,7 @@ class TestScanRunnerSuggestionPersistence:
 class TestScanRunnerReviseForBatch:
     """revise_for_batch — single-batch path used by `--revise-batch` CLI flag.
 
-    Drives DEMO_SCRIPT '改方案' moment: presenter picks one batch, types a
+    Drives the '改方案' moment: presenter picks one batch, types a
     feedback line, and we re-call the LLM with that feedback. Out-of-scope
     feedback must still land (red-stamped) rather than silently fail — the
     point of demo is to show the guard-rail working, not to hide it.
