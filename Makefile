@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev test lint fmt check run scan demo report validate-llm push monthly qualify clean
+.PHONY: help install dev test lint fmt check run scan demo report validate-llm push monthly clean
 
 help: ## 显示所有命令
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -48,11 +48,6 @@ validate-llm: ## 真实 LLM 5+ 场景合规率验证 (用法 PROVIDER=moonshot)
 
 monthly: ## 手动触发月度报告管线 (写 PDF; 加 PUSH=1 推送摘要卡到企微群)
 	@uv run python tools/trigger_monthly_now.py $(if $(PUSH),--push,)
-
-qualify: ## 销售线索评估 (默认交互 8 题; ANSWERS=path.json 跳过交互; REASSESS=path.json 改一字段重算)
-	@uv run python tools/qualify_lead.py \
-		$(if $(ANSWERS),--answers $(ANSWERS),) \
-		$(if $(REASSESS),--reassess $(REASSESS),)
 
 push: ## 真推卡片到企微群 (用法 make push CUSTOMER=customerA [TODAY=2026-05-26] [PROVIDER=moonshot]，需先 export WECOM_WEBHOOK_URL)
 	@test -n "$$WECOM_WEBHOOK_URL" || (echo "ERROR: 先 export WECOM_WEBHOOK_URL=<群机器人 URL>"; exit 1)

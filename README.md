@@ -68,9 +68,6 @@ docker compose exec app uv run python -m src.cli \
 
 # 离线渲染示例企微卡片到 docs/demo_samples/
 docker compose exec app make demo
-
-# 跑销售线索评估问卷（PRD §12.1）
-docker compose exec app make qualify
 ```
 
 完整食品厂 IT 主管视角 5 步跑通流程：[**docs/QUICKSTART.md →**](docs/QUICKSTART.md)
@@ -123,14 +120,7 @@ Apache/GPL 的开源核心保证 **下载即用、源码可审、私有化部署
 | 年损 100-300 万 | 商业版 8-15 万 / 年 + 必选插件 | 2-4× |
 | 年损 > 300 万 | 议价（建议起步 25 万） + 私有化部署服务 | 4-6× |
 
-填一份 5 分钟问卷拿到你的报价 + 一页纸 ROI PDF：
-
-```bash
-make qualify
-# 输出 markdown 摘要 + data/leads/<客户名>_<日期>.pdf
-```
-
-[完整销售流程文档（PRD §12.1） →](docs/PRD.md#121-年损快速诊断问卷销售前置工具)
+想要报价 / 私有化部署 / 3 个月免费 PoC，见下方 [联系 / 商业合作](#-联系--商业合作)。
 
 ---
 
@@ -147,8 +137,7 @@ make qualify
 | 月度 PDF 报告 + 摘要卡 + cron 定时 | `src/reports/` + `src/scheduler/monthly.py` | ✅ |
 | 路径 B 企微回调（plaintext 骨架） | `src/webhook/` | ✅ |
 | 长跑服务入口（FastAPI lifespan + 调度器） | `src/runtime/lifespan.py` | ✅ |
-| 销售线索评估问卷 + ROI 一页纸 PDF | `src/sales/` + `tools/qualify_lead.py` | ✅ |
-| **企微回调 AES 加解密 + 签名校验** | — | ⏳ 等客户 corp_secret |
+| **企微回调 AES 加解密 + 签名校验** | — | 企业版插件 |
 | **ERP 对接插件**（SAP / 用友 / 金蝶 / 自研） | — | ⏳ v0.5+ |
 
 **当前指标**：391 测试 · 100% 覆盖率 · 21+ commits · CI 全绿
@@ -188,13 +177,8 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 |---|---|
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | **食品厂 IT 主管 5 分钟试用指南**（含 FAQ） |
 | [docs/blog/](docs/blog/) | **博客**：行业洞察、案例拆解、ROI 测算（深度长文） |
-| [docs/PRD.md](docs/PRD.md) | 产品规格、模块设计、商业模式、销售工具 |
 | [docs/TECH_SPEC.md](docs/TECH_SPEC.md) | 技术架构、数据模型、接口设计 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 / 依赖图 / 设计决策记录 |
-| [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | 5 分钟现场 Demo 脚本（含 A/B 双场景 + FAQ 8 题） |
-| [docs/RUNBOOK_DEMO.md](docs/RUNBOOK_DEMO.md) | 演前 30 分钟操作 + 三层降级方案 |
-| [docs/MARKETING.md](docs/MARKETING.md) | 内容营销 SOP（团队内部，关键词 / 渠道 / 节奏） |
-| [docs/TODO.md](docs/TODO.md) | 当前进度 + 验收清单 |
 | [docs/demo_samples/](docs/demo_samples/) | 现成的卡片样本 + 月度 PDF 报告 |
 
 ---
