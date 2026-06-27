@@ -40,6 +40,23 @@ def base_settings(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> Settings
     return s
 
 
+@pytest.fixture(autouse=True)
+def _empty_plugins_root(tmp_path: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make lifespan tests hermetic w.r.t. enterprise plugins.
+
+    `build_lifespan` runs `load_plugins` against the real repo-root/plugins on
+    startup. A developer who clones the private enterprise repo into
+    plugins/enterprise/ would otherwise (a) fail the pure-OSS assertion and
+    (b) have those plugins mutate global singletons (set_repository, etc.)
+    mid-test. Point the loader at an empty dir so tests don't depend on what's
+    checked out locally. (CI never has plugins/enterprise/, so CI was already
+    green; this just stops local checkouts from breaking the suite.)
+    """
+    empty = tmp_path / "no_plugins"  # type: ignore[operator]
+    empty.mkdir()
+    monkeypatch.setattr("src.plugins.loader.DEFAULT_PLUGINS_ROOT", empty)
+
+
 def _make_client(app: FastAPI) -> Iterator[TestClient]:
     """Drive the real lifespan via TestClient context."""
     with TestClient(app) as c:
