@@ -176,7 +176,6 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 | 文档 | 看什么 |
 |---|---|
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | **食品厂 IT 主管 5 分钟试用指南**（含 FAQ） |
-| [docs/blog/](docs/blog/) | **博客**：行业洞察、案例拆解、ROI 测算（深度长文） |
 | [docs/TECH_SPEC.md](docs/TECH_SPEC.md) | 技术架构、数据模型、接口设计 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 / 依赖图 / 设计决策记录 |
 | [docs/demo_samples/](docs/demo_samples/) | 现成的卡片样本 + 月度 PDF 报告 |
@@ -190,7 +189,7 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 - 想接**真实 ERP**（SAP / 用友 / 金蝶 / 自研）或**真实企微回调**（AES 加解密）→ 商业版插件
 - 想要**私有化部署**（库存数据不出机房）
 - 想做 **3 个月免费 PoC 试点**，拿你厂的真实报损降低数据
-- 单纯想了解能不能帮到你们厂，或填一份 5 分钟年损诊断问卷拿报价
+- 单纯想了解能不能帮到你们厂，或要一份 5 分钟年损诊断 + ROI 一页纸
 
 | 方式 | 联系方式 |
 |---|---|
