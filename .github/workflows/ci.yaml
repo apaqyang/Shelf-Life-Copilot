@@ -38,6 +38,9 @@ jobs:
       - name: mypy
         run: uv run mypy src
 
+      - name: 内容边界检查（拦对内/营销材料）
+        run: uv run python tools/check_no_internal_leak.py
+
   test:
     name: Test (pytest + coverage)
     runs-on: ubuntu-latest
