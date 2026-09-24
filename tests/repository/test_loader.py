@@ -50,6 +50,13 @@ def temp_data_root(tmp_path: Path) -> Path:
 
 
 class TestLoadCustomerConfig:
+    @pytest.mark.parametrize(
+        "customer_id", ["", ".", "..", "../secret", "nested/customer", r"nested\customer"]
+    )
+    def test_rejects_path_traversal(self, temp_data_root: Path, customer_id: str) -> None:
+        with pytest.raises(ValueError, match="customer_id"):
+            load_customer_config(customer_id, root=temp_data_root)
+
     def test_parses_config_from_tmp_root(self, temp_data_root: Path) -> None:
         config = load_customer_config("customerT", root=temp_data_root)
         assert isinstance(config, CustomerConfig)
@@ -62,6 +69,13 @@ class TestLoadCustomerConfig:
 
 
 class TestLoadBatches:
+    @pytest.mark.parametrize(
+        "customer_id", ["", ".", "..", "../secret", "nested/customer", r"nested\customer"]
+    )
+    def test_rejects_path_traversal(self, temp_data_root: Path, customer_id: str) -> None:
+        with pytest.raises(ValueError, match="customer_id"):
+            load_batches(customer_id, root=temp_data_root)
+
     def test_parses_batches_from_tmp_root(self, temp_data_root: Path) -> None:
         batches = load_batches("customerT", root=temp_data_root)
         assert len(batches) == 1

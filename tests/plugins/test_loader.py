@@ -60,6 +60,58 @@ class TestLoading:
         loaded = load_plugins(_registry(), plugins_root=tmp_path)
         assert loaded == ["erp_sap", "wecom_realtime"]
 
+    def test_multiple_erp_plugins_require_explicit_provider(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.delenv("ERP_PROVIDER", raising=False)
+        ent = tmp_path / "enterprise"
+        for name in ("erp_sap", "erp_yonyou"):
+            _write_plugin(
+                ent,
+                name,
+                f'def register(registry):\n    registry.app.state.selected = "{name}"\n',
+            )
+
+        caplog.set_level(logging.WARNING, logger="src.plugins.loader")
+        registry = _registry()
+        assert load_plugins(registry, plugins_root=tmp_path) == []
+        assert not hasattr(registry.app.state, "selected")
+        assert any("ERP_PROVIDER" in record.message for record in caplog.records)
+
+    def test_explicit_erp_provider_selects_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ERP_PROVIDER", "yonyou")
+        ent = tmp_path / "enterprise"
+        for name in ("erp_sap", "erp_yonyou"):
+            _write_plugin(
+                ent,
+                name,
+                f'def register(registry):\n    registry.app.state.selected = "{name}"\n',
+            )
+
+        registry = _registry()
+        assert load_plugins(registry, plugins_root=tmp_path) == ["erp_yonyou"]
+        assert registry.app.state.selected == "erp_yonyou"
+
+    def test_unknown_erp_provider_warns_and_skips_all(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("ERP_PROVIDER", "typo")
+        ent = tmp_path / "enterprise"
+        for name in ("erp_sap", "erp_yonyou"):
+            _write_plugin(ent, name, "def register(registry):\n    pass\n")
+
+        caplog.set_level(logging.WARNING, logger="src.plugins.loader")
+        assert load_plugins(_registry(), plugins_root=tmp_path) == []
+        assert any("typo" in record.message for record in caplog.records)
+
     def test_plugin_without_register_is_skipped(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
@@ -96,9 +148,7 @@ class TestLoading:
         assert loaded == ["erp_demo"]
         assert registry.app.state.helper_value == 42
 
-    def test_plugin_that_raises_on_import_propagates_and_unregisters(
-        self, tmp_path: Path
-    ) -> None:
+    def test_plugin_that_raises_on_import_propagates_and_unregisters(self, tmp_path: Path) -> None:
         """A broken plugin fails loud (paying customer must see it), and we don't
         leave a half-initialised module in sys.modules."""
         import sys

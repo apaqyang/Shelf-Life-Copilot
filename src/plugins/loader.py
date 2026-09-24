@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import os
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -67,10 +68,35 @@ def load_plugins(
     if not enterprise.is_dir():
         return registry.loaded
 
-    for child in sorted(enterprise.iterdir()):
-        init_path = child / "__init__.py"
-        if not child.is_dir() or not init_path.is_file():
+    packages = [
+        child
+        for child in sorted(enterprise.iterdir())
+        if child.is_dir() and (child / "__init__.py").is_file()
+    ]
+    erp_packages = [child for child in packages if child.name.startswith("erp_")]
+    selected_erp = os.environ.get("ERP_PROVIDER")
+    if len(erp_packages) > 1 and not selected_erp:
+        logger.warning(
+            "Multiple ERP plugins found (%s); set ERP_PROVIDER to select one. "
+            "Keeping the default JSON repository.",
+            ", ".join(child.name.removeprefix("erp_") for child in erp_packages),
+        )
+    selected_package = f"erp_{selected_erp}" if selected_erp else None
+    if selected_package and all(child.name != selected_package for child in erp_packages):
+        logger.warning(
+            "ERP_PROVIDER=%r does not match any installed ERP plugin; "
+            "keeping the default JSON repository.",
+            selected_erp,
+        )
+
+    for child in packages:
+        if (
+            child in erp_packages
+            and (len(erp_packages) > 1 or selected_package is not None)
+            and child.name != selected_package
+        ):
             continue
+        init_path = child / "__init__.py"
         module = _import_package(child.name, init_path)
         if module is None:  # pragma: no cover - paired with the importlib edge case above
             continue

@@ -73,7 +73,7 @@ def _alert_body(
 def render_alert_card(
     batch: Batch, alert: Alert, suggestion: Suggestion, customer: CustomerConfig
 ) -> Card:
-    """Render the standard near-expiry alert card (PRD §5.3 sample)."""
+    """Render the standard near-expiry alert card."""
     return Card(
         kind=CardKind.ALERT,
         customer_id=customer.customer_id,
@@ -92,7 +92,7 @@ def render_out_of_scope_card(
     """Same layout as alert card, but with a red "需人工复核" banner on top.
 
     Used when the LLM's "改方案" output picked an action outside enabled_actions
-    (PRD §5.3 越界处理).
+    for the operator-feedback out-of-scope path.
     """
     banner = "> 🚨 **⚠️ 非标准动作 · 需人工复核**\n\n"
     feedback_section = ""
@@ -175,7 +175,7 @@ def render_monthly_summary_card(data: MonthlyReportData) -> Card:
 
     The PDF goes to email/file storage for the director's boss-deck use; this
     card is what lands in the WeCom group so the team has a copy-pasteable
-    one-screen view of last month's numbers (PRD §5.5).
+    one-screen view of last month's numbers.
     """
     top_lines = (
         "\n".join(

@@ -2,16 +2,17 @@
 
 Mirrors DailyScheduler's "register one APScheduler job, dispatch to a callback"
 shape so operations folks see one scheduler pattern across the codebase, not
-two. The cron defaults (day=1, 08:00 Asia/Shanghai) match PRD §5.5: "每月 1 号
-自动生成上一月 PDF 报告，企微推送给总监".
+two. The cron defaults to day 1 at 08:00 Asia/Shanghai so each run can
+generate and deliver the previous calendar month's report.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -57,10 +58,11 @@ class MonthlyReportScheduler:
         self._output_dir = output_dir
         self._baselines = baselines
         self._on_result = on_result
+        self._timezone = ZoneInfo(timezone)
         self._scheduler = AsyncIOScheduler()
         self._scheduler.add_job(
             self.run_now,
-            trigger=CronTrigger(day=day, hour=hour, minute=minute, timezone=timezone),
+            trigger=CronTrigger(day=day, hour=hour, minute=minute, timezone=self._timezone),
             id=_JOB_ID,
             replace_existing=True,
         )
@@ -74,7 +76,7 @@ class MonthlyReportScheduler:
         """
         try:
             results = run_monthly_reports(
-                today=datetime.now(UTC).date(),
+                today=datetime.now(self._timezone).date(),
                 db_path=self._db_path,
                 output_dir=self._output_dir,
                 baselines=self._baselines,

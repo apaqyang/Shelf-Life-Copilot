@@ -1,9 +1,9 @@
-"""WeCom layer — card rendering + (future) push client.
+"""WeCom layer — card rendering + push clients.
 
 v0.1 implements pure-function renderers for the 4 card templates (alert / work
-order / receipt / out-of-scope) plus a dry-run client that collects payloads
-for offline demo. Real WeCom API integration is gated on customer's admin
-permission approval (see TODO.md "阻塞 & 风险").
+order / receipt / out-of-scope), a dry-run client for offline demos, and a
+group-bot webhook client. Interactive application messages require an
+enterprise callback plugin and customer administrator approval.
 """
 
 from src.wecom.cards import (

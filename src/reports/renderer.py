@@ -4,7 +4,7 @@ Why reportlab over weasyprint:
 - Pure Python, no Cairo / Pango system dep — runs in any minimal Docker image.
 - CID font STSong-Light ships with reportlab → Chinese works zero-config.
 
-Layout intent: "总监 → 老板汇报材料" (PRD §5.5). Numbers should jump off the
+Layout intent: a concise director-to-management report. Numbers should jump off the
 page; explanation is secondary. We use 4 sections, each on its own page so the
 PDF reads like a slide deck when printed.
 """

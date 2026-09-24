@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -38,6 +39,10 @@ class TestSuggestionCreation:
 
 
 class TestSuggestionValidation:
+    def test_naive_generated_at_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            Suggestion(**_base_payload(generated_at=datetime(2026, 5, 26, 9, 0)))
+
     def test_negative_savings_rejected(self) -> None:
         with pytest.raises(ValidationError):
             Suggestion(**_base_payload(savings_estimate=-100.0))

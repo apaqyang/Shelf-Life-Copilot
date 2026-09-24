@@ -7,7 +7,7 @@ sorting works lexicographically and we can read it back without dateutil.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.models import ActionType, Decision, DecisionOutcome
@@ -65,7 +65,7 @@ class DecisionStore:
                 decision.batch_id,
                 decision.customer_id,
                 decision.material_name,
-                decision.decided_at.isoformat(),
+                decision.decided_at.astimezone(UTC).isoformat(),
                 decision.action.value,
                 decision.outcome.value,
                 decision.savings_estimate,
@@ -103,7 +103,11 @@ class DecisionStore:
               AND decided_at <  ?
             ORDER BY decided_at ASC
             """,
-            (customer_id, start.isoformat(), end.isoformat()),
+            (
+                customer_id,
+                start.astimezone(UTC).isoformat(),
+                end.astimezone(UTC).isoformat(),
+            ),
         ).fetchall()
 
         return [

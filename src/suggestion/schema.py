@@ -1,6 +1,6 @@
 """Tool definition forcing strict JSON output via tool_use / function calling.
 
-Schema design (PRD §5.3 越界兜底):
+Schema design (operator-feedback out-of-scope fallback):
 - `action` enum spans the *full* ActionType set, not just `enabled_actions`.
 - The SYSTEM_PROMPT instructs the model to prefer enabled actions, and only
   reach for a disabled one when the user's 改方案 feedback explicitly asks for

@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from apscheduler.triggers.cron import CronTrigger
 
 from src.scheduler import DailyScheduler, ScanResult, ScanRunner
 
@@ -27,6 +28,13 @@ def runner() -> AsyncMock:
 
 
 class TestDailySchedulerInit:
+    def test_cron_defaults_to_shanghai_timezone(self, runner: AsyncMock) -> None:
+        scheduler = DailyScheduler(runner=runner, customer_ids=["customerA"])
+        job = scheduler._scheduler.get_job("scan-customerA")  # noqa: SLF001
+        assert job is not None
+        assert isinstance(job.trigger, CronTrigger)
+        assert str(job.trigger.timezone) == "Asia/Shanghai"
+
     def test_registers_one_job_per_customer(self, runner: AsyncMock) -> None:
         scheduler = DailyScheduler(runner=runner, customer_ids=["customerA", "customerB"])
         assert set(scheduler.job_ids) == {"scan-customerA", "scan-customerB"}

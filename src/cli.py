@@ -12,7 +12,7 @@ Usage:
 required: ANTHROPIC_API_KEY (default) or MOONSHOT_API_KEY (--provider moonshot).
 
 `--revise-batch BATCH_ID --feedback "..."` re-runs the LLM for a single batch
-with operator feedback (PRD §5.3 改方案). Out-of-scope suggestions still come
+with operator feedback. Out-of-scope suggestions still come
 back as the red-stamped card — the guard-rail is visible by design.
 
 `--record-decision BATCH_ID --outcome ... --action ... --savings-estimate N`
@@ -32,7 +32,7 @@ from datetime import UTC, date, datetime
 
 from src.models import ActionType, Decision, DecisionOutcome
 from src.persistence import DecisionStore, SuggestionStore
-from src.repository import load_batches
+from src.repository import get_repository
 from src.scheduler import ScanResult, ScanRunner
 from src.suggestion import (
     ANTHROPIC_DEFAULT_MODEL,
@@ -272,7 +272,7 @@ def _run_record_decision(args: argparse.Namespace) -> int:
         print("--record-decision requires --savings-estimate.", file=sys.stderr)
         return 2
 
-    batches = load_batches(args.customer)
+    batches = get_repository().load_batches(args.customer)
     batch = next((b for b in batches if b.batch_id == args.record_decision), None)
     if batch is None:
         print(

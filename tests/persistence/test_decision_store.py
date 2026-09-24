@@ -94,6 +94,29 @@ class TestSaveAndList:
 
 
 class TestPeriodFiltering:
+    def test_period_filter_compares_instants_across_timezone_offsets(
+        self, store: DecisionStore
+    ) -> None:
+        shanghai = timezone(timedelta(hours=8))
+        before_may_utc = _make_decision(
+            batch_id="A-before",
+            decided_at=datetime(2026, 5, 1, 7, 30, tzinfo=shanghai),
+        )
+        inside_may_utc = _make_decision(
+            batch_id="A-inside",
+            decided_at=datetime(2026, 5, 1, 8, 30, tzinfo=shanghai),
+        )
+        store.save(before_may_utc)
+        store.save(inside_may_utc)
+
+        results = store.list_for_period(
+            "customerA",
+            start=datetime(2026, 5, 1, tzinfo=UTC),
+            end=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+
+        assert [r.batch_id for r in results] == ["A-inside"]
+
     def test_excludes_decisions_outside_window(self, store: DecisionStore) -> None:
         early = _make_decision(
             batch_id="A-001", decided_at=datetime(2026, 4, 30, 23, 59, tzinfo=UTC)

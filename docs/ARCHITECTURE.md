@@ -1,7 +1,7 @@
 # Architecture — Shelf-Life Copilot
 
 > 阶段：v0.1（Mock Demo）
-> 配套文档：[PRD.md](PRD.md) · [TECH_SPEC.md](TECH_SPEC.md) · [TODO.md](TODO.md)
+> 配套文档：[TECH_SPEC.md](TECH_SPEC.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)
 > 更新日期：2026-05-27
 
 本文档讲清楚**代码长什么样**——分层、依赖方向、关键模块的边界。
@@ -181,7 +181,7 @@ src/
 ### 5.1 LLM 输出靠 tool_use / function calling 强制 JSON
 - 比"prompt 里请求输出 JSON 然后正则提取"可靠 10×
 - `action` 字段的 `enum` **覆盖 ActionType 全集**；description 把 `enabled_actions` 列为首选
-  - 这是 PRD §5.3 越界兜底的实现：LLM 默认走 enabled，但用户反馈明确要求 disabled 时可越界
+  - 这是改方案越界兜底的实现：LLM 默认走 enabled，但用户反馈明确要求 disabled 时可越界
   - `is_standard` 由 Python 端 `action in enabled_actions` 判断，越界则路由到红标卡片
 - 见 `src/suggestion/schema.py` `build_suggestion_tool` + `src/suggestion/prompt.py` SYSTEM_PROMPT
 
@@ -191,7 +191,7 @@ src/
   - `AnthropicProvider`：Claude tool_use（默认）
   - `MoonshotProvider`：Moonshot / KIMI via OpenAI 协议 function calling（国内可访问）
 - CLI 通过 `--provider {anthropic,moonshot}` 切换；engine 完全 vendor-agnostic
-- PRD §9.1 合规率验证脚本 `tools/validate_llm.py` 同时支持两个 provider
+- 质量验证脚本 `tools/validate_llm.py` 同时支持两个 provider
 
 ### 5.2 LLM 调用被依赖注入隔离
 - `SuggestionEngine.__init__(client: AsyncAnthropic)` 接受 client 实例
@@ -285,11 +285,11 @@ tests/
 
 | 项 | 当前状态 | v0.5 计划 |
 |---|---|---|
-| 真实 ERP / WMS 对接 | ❌ 只读 JSON | 加 ERPAdapter Protocol，实现 SAP/用友/金蝶 |
+| 真实 ERP / WMS 对接 | 开源核心提供 `BatchRepository` 插件边界 | SAP / 用友 / 金蝶适配器作为企业插件部署 |
 | 企微卡片渲染 | ✅ `src/wecom/cards.py`（4 模板，纯函数） | — |
-| 企微真实推送 | ❌（仅 `DryRunWecomClient`） | v0.5 加 `HttpWecomClient`，订阅 DailyScheduler 的 on_result |
-| 决策日志持久化（Decision 表） | ❌ | SQLite → PostgreSQL |
-| 改方案的多轮对话 | ❌（仅支持单轮） | v0.5 视情况再决定（PRD 决策已锁定单轮） |
+| 企微真实推送 | ✅ 群机器人 webhook | 交互式应用消息由企业插件提供 |
+| 决策日志持久化（Decision 表） | ✅ SQLite | v0.5+ 可迁移 PostgreSQL |
+| 改方案的多轮对话 | ❌（仅支持单轮） | 保持单轮；后续评估见 `ROADMAP.md` |
 | 月度 PDF 报告 | ✅ `src/reports/`（reportlab + STSong-Light CID 中文） | 接持久化决策日志驱动数据源 + 定时触发 |
 | 多租户隔离的鉴权 | ❌ | FastAPI 接口层做 JWT |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
@@ -335,7 +335,7 @@ tests/
 | 渲染所有卡片到终端预览 | `... uv run python -m src.cli --customer customerA --today 2026-05-26 --render-cards` |
 | 离线生成 demo 卡片样本 | `make demo` |
 | 生成月度 PDF 报告（mock 数据） | `make report` |
-| PRD §9.1 真实 LLM 合规率验证 | `MOONSHOT_API_KEY=sk-... make validate-llm PROVIDER=moonshot` |
+| 真实 LLM 质量验证 | `MOONSHOT_API_KEY=sk-... make validate-llm PROVIDER=moonshot` |
 
 ---
 

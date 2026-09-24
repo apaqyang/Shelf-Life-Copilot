@@ -3,7 +3,6 @@
 # 用法：
 #   docker compose up           # 起服务（offline 模式，不需要任何 key）
 #   docker compose exec app make demo            # 渲染示例卡片
-#   docker compose exec app make qualify         # 跑销售线索评估问卷
 #   docker compose down                          # 停服务
 #
 # 切换到真实 LLM：在仓库根目录建 .env 文件，填入 ANTHROPIC_API_KEY 或

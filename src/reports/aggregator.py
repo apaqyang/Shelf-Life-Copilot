@@ -18,7 +18,7 @@ from src.models import ActionType, Decision
 
 _MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
 
-# v1.0 annual-fee schedule from PRD §11.2 — used to derive monthly AI cost for ROI.
+# Public annual-fee tiers from README.md, used to derive monthly AI cost for ROI.
 _TIER_BREAKPOINT_MID = 1_000_000.0
 _TIER_BREAKPOINT_HIGH = 3_000_000.0
 _TIER_FEE_LOW = 80_000.0

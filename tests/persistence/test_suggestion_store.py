@@ -7,7 +7,7 @@ placeholders. Tests target that contract (single source of truth = "latest").
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -91,6 +91,24 @@ class TestSaveAndLookup:
 
 
 class TestLatestOrdering:
+    def test_latest_compares_instants_across_timezone_offsets(self, store: SuggestionStore) -> None:
+        shanghai = timezone(timedelta(hours=8))
+        actually_earlier = _make_suggestion(
+            generated_at=datetime(2026, 5, 26, 17, 0, tzinfo=shanghai),
+            savings_estimate=1000,
+        )
+        actually_later = _make_suggestion(
+            generated_at=datetime(2026, 5, 26, 10, 0, tzinfo=UTC),
+            savings_estimate=2000,
+        )
+        store.save(actually_earlier)
+        store.save(actually_later)
+
+        got = store.latest_for_batch("customerA", "A-001")
+
+        assert got is not None
+        assert got.savings_estimate == 2000
+
     def test_latest_wins_on_generated_at(self, store: SuggestionStore) -> None:
         early = _make_suggestion(
             generated_at=datetime(2026, 5, 26, 7, 0, tzinfo=UTC),

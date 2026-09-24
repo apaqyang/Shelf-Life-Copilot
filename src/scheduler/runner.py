@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.alerts import scan_batch
 from src.models import Alert, Card, Suggestion
 from src.persistence import SuggestionStore
-from src.repository import load_batches, load_customer_config
+from src.repository import BatchRepository, JsonRepository, get_repository
 from src.suggestion import SuggestionEngine
 from src.wecom import render_card_for_alert
 
@@ -53,10 +53,16 @@ class ScanRunner:
         engine: SuggestionEngine | None = None,
         data_root: Path | None = None,
         suggestion_store: SuggestionStore | None = None,
+        repository: BatchRepository | None = None,
     ) -> None:
         self._engine = engine
-        self._data_root = data_root
         self._suggestion_store = suggestion_store
+        if repository is not None:
+            self._repository = repository
+        elif data_root is not None:
+            self._repository = JsonRepository(data_root)
+        else:
+            self._repository = get_repository()
 
     async def run_for_customer(
         self,
@@ -77,8 +83,8 @@ class ScanRunner:
         if not skip_llm and self._engine is None:
             raise ValueError("engine is required when skip_llm=False")
 
-        config = load_customer_config(customer_id, root=self._data_root)
-        batches = load_batches(customer_id, root=self._data_root)
+        config = self._repository.load_customer_config(customer_id)
+        batches = self._repository.load_batches(customer_id)
 
         alerts: list[Alert] = []
         suggestions: list[Suggestion] = []
@@ -122,7 +128,7 @@ class ScanRunner:
         feedback: str,
         today: date | None = None,
     ) -> ScanResult:
-        """Re-run suggestion for one batch with operator feedback (PRD §5.3 改方案).
+        """Re-run a suggestion for one batch with operator feedback.
 
         Mirrors run_for_customer but scoped to a single batch. Out-of-scope
         suggestions still come back rendered (as the red-stamped card) so the
@@ -135,8 +141,8 @@ class ScanRunner:
         if self._engine is None:
             raise ValueError("engine is required for revise_for_batch")
 
-        config = load_customer_config(customer_id, root=self._data_root)
-        batches = load_batches(customer_id, root=self._data_root)
+        config = self._repository.load_customer_config(customer_id)
+        batches = self._repository.load_batches(customer_id)
 
         batch = next((b for b in batches if b.batch_id == batch_id), None)
         if batch is None:

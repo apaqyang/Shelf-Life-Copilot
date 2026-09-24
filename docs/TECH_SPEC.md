@@ -1,6 +1,6 @@
 # Tech Spec — Shelf-Life Copilot
 
-> 配套：[PRD.md](PRD.md)
+> 配套：[ARCHITECTURE.md](ARCHITECTURE.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)
 > 阶段：v0.1（Mock Demo）
 > 更新日期：2026-05-26
 
@@ -141,7 +141,7 @@ LLM 建议生成器核心函数。
 
 ## 5. Prompt 设计
 
-详细 Prompt 模板见 [PRD.md §6.2](PRD.md)。
+详细 Prompt 模板见 `src/suggestion/prompt.py`。
 
 关键约束：
 - **输出严格 JSON**：`{"action", "savings", "rationale", "confidence"}`

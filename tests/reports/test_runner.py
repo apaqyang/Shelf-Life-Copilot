@@ -125,7 +125,7 @@ class TestRunMonthlyReports:
         db = tmp_path / "d.db"
         store = DecisionStore(db)
         # Decision in Dec 2026 must show up when running on 2027-01-01.
-        store.save(_decision(decided_at=datetime(2026, 12, 31, 23, 0, tzinfo=UTC)))
+        store.save(_decision(decided_at=datetime(2026, 12, 31, 15, 0, tzinfo=UTC)))
 
         out = tmp_path / "out"
         results = run_monthly_reports(

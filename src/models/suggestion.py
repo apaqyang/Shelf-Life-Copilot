@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.models.action import ActionType
 
@@ -33,3 +33,10 @@ class Suggestion(BaseModel):
     generated_at: datetime = Field(default_factory=_now_utc)
     llm_model: str = Field(min_length=1)
     user_feedback: str | None = None
+
+    @field_validator("generated_at")
+    @classmethod
+    def _require_tz(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("generated_at must be timezone-aware")
+        return value

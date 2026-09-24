@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from src.models import ActionType, DecisionOutcome, Suggestion
+from src.models import ActionType, Batch, DecisionOutcome, Suggestion
 from src.persistence import DecisionStore, SuggestionStore
 from src.webhook.handlers import (
     UnknownActionError,
@@ -33,6 +33,41 @@ def _click(event_key: str) -> WecomEvent:
 
 
 class TestHandleClick:
+    def test_uses_injected_repository_to_resolve_batch(self) -> None:
+        class PluginRepository:
+            def load_batches(self, customer_id: str) -> list[Batch]:
+                assert customer_id == "erp-customer"
+                return [
+                    Batch(
+                        batch_id="ERP-001",
+                        customer_id=customer_id,
+                        material_id="M-1",
+                        material_name="ERP material",
+                        production_date=datetime(2026, 1, 1).date(),
+                        expiry_date=datetime(2026, 6, 1).date(),
+                        stock_qty=1,
+                        unit="kg",
+                        warehouse="W1",
+                    )
+                ]
+
+            def load_customer_config(self, customer_id: str) -> object:
+                raise AssertionError("not used by click handling")
+
+        store = DecisionStore(":memory:")
+        handle_click(
+            _click("approve:erp-customer:ERP-001"),
+            store,
+            repository=PluginRepository(),  # type: ignore[arg-type]
+        )
+
+        rows = store.list_for_period(
+            "erp-customer",
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2027, 1, 1, tzinfo=UTC),
+        )
+        assert rows[0].material_name == "ERP material"
+
     def test_approve_writes_decision_with_approved_outcome(self) -> None:
         store = DecisionStore(":memory:")
         detail = handle_click(_click("approve:customerA:A-001"), store)
@@ -107,6 +142,11 @@ class TestHandleClick:
         # load_batches raises FileNotFoundError → handler wraps as UnknownBatchError
         with pytest.raises(UnknownBatchError, match="customerZ"):
             handle_click(_click("approve:customerZ:A-001"), store)
+
+    def test_customer_path_traversal_is_rejected_as_unknown(self) -> None:
+        store = DecisionStore(":memory:")
+        with pytest.raises(UnknownBatchError, match="not found"):
+            handle_click(_click("approve:../customerA:A-001"), store)
 
 
 class TestHandleClickWithSuggestionStore:

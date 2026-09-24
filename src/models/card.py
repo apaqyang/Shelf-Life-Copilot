@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CardKind(StrEnum):
-    """The card templates v0.1 must render (PRD §5.3 / §5.5 / TODO Week 2)."""
+    """The card templates supported by the v0.1 rendering layer."""
 
     ALERT = "alert"
     WORK_ORDER = "work_order"

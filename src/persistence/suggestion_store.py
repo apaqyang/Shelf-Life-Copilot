@@ -9,7 +9,7 @@ recent one keyed by (customer_id, batch_id).
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.models import ActionType, Suggestion
@@ -61,7 +61,7 @@ class SuggestionStore:
                 1 if suggestion.is_standard else 0,
                 suggestion.llm_model,
                 suggestion.user_feedback,
-                suggestion.generated_at.isoformat(),
+                suggestion.generated_at.astimezone(UTC).isoformat(),
             ),
         )
         assert cur.lastrowid is not None  # noqa: S101  (sqlite INSERT contract)

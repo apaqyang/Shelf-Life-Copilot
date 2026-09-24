@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import AsyncMock
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -73,6 +74,41 @@ class TestScanRunnerCustomerA:
         assert Severity.ORANGE in severities
 
     @pytest.mark.asyncio
+    async def test_uses_injected_repository(self, mock_engine: AsyncMock) -> None:
+        repository = MagicMock()
+        repository.load_customer_config.return_value = CustomerConfig(
+            customer_id="plugin-customer",
+            industry="test",
+            enabled_actions=[ActionType.TRANSFORM],
+            disabled_actions=[],
+            industry_phrases={},
+            alert_thresholds={"yellow": 30, "orange": 15, "red": 7},
+            avg_savings_per_batch=1000,
+            decision_makers=[],
+        )
+        repository.load_batches.return_value = [
+            Batch(
+                batch_id="ERP-001",
+                customer_id="plugin-customer",
+                material_id="M-1",
+                material_name="ERP batch",
+                production_date=date(2026, 1, 1),
+                expiry_date=date(2026, 5, 30),
+                stock_qty=10,
+                unit="kg",
+                warehouse="W1",
+            )
+        ]
+
+        runner = ScanRunner(engine=mock_engine, repository=repository)
+        result = await runner.run_for_customer("plugin-customer", today=date(2026, 5, 26))
+
+        assert result.total_batches == 1
+        assert [alert.batch_id for alert in result.alerts] == ["ERP-001"]
+        repository.load_customer_config.assert_called_once_with("plugin-customer")
+        repository.load_batches.assert_called_once_with("plugin-customer")
+
+    @pytest.mark.asyncio
     async def test_skip_llm_returns_alerts_only(self, mock_engine: AsyncMock) -> None:
         runner = ScanRunner(engine=mock_engine)
         result = await runner.run_for_customer("customerA", today=date(2026, 5, 26), skip_llm=True)
@@ -122,6 +158,12 @@ class TestScanRunnerErrorIsolation:
 
 
 class TestScanRunnerOptionalEngine:
+    @pytest.mark.asyncio
+    async def test_explicit_data_root_keeps_json_repository_compatibility(self) -> None:
+        runner = ScanRunner(engine=None, data_root=Path("data"))
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26), skip_llm=True)
+        assert result.total_batches == 7
+
     @pytest.mark.asyncio
     async def test_engine_none_with_skip_llm_works(self) -> None:
         runner = ScanRunner(engine=None)

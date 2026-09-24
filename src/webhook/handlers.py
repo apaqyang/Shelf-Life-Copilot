@@ -6,8 +6,8 @@ EventKey contract: '<action>:<customer_id>:<batch_id>', e.g.
     revise:customerA:A-001
 
 approve/snooze land a Decision row; revise returns a prompt and writes nothing
-(改方案 needs operator free-text, which is a separate message — out of v0.1
-scope, see [[v0.5 SuggestionStore]] for the follow-up).
+(改方案 needs operator free-text, which is a separate message and remains
+out of the v0.1 callback scope).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 from src.models import ActionType, Decision, DecisionOutcome
 from src.persistence import DecisionStore, SuggestionStore
-from src.repository import load_batches
+from src.repository import BatchRepository, get_repository
 from src.webhook.schemas import WecomEvent
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ def handle_click(
     event: WecomEvent,
     store: DecisionStore,
     suggestion_store: SuggestionStore | None = None,
+    repository: BatchRepository | None = None,
 ) -> str:
     """Route a click event to the right side effect, return a short status line.
 
@@ -75,9 +76,10 @@ def handle_click(
     if outcome is None:
         raise UnknownActionError(f"unknown action_key: {action_key!r}")
 
+    repo = repository if repository is not None else get_repository()
     try:
-        batches = load_batches(customer_id)
-    except FileNotFoundError as exc:
+        batches = repo.load_batches(customer_id)
+    except (FileNotFoundError, ValueError) as exc:
         raise UnknownBatchError(f"customer {customer_id!r} not found") from exc
 
     batch = next((b for b in batches if b.batch_id == batch_id), None)

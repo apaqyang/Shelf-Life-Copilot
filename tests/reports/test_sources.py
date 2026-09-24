@@ -43,12 +43,12 @@ class TestLoadFromSqlite:
     def test_returns_only_decisions_in_target_month(self, tmp_path: Path) -> None:
         db_file = tmp_path / "d.db"
         store = DecisionStore(db_file)
-        store.save(_decision(batch_id="apr", decided_at=datetime(2026, 4, 30, 23, 0, tzinfo=UTC)))
-        store.save(_decision(batch_id="may-1", decided_at=datetime(2026, 5, 1, 0, 0, tzinfo=UTC)))
+        store.save(_decision(batch_id="apr", decided_at=datetime(2026, 4, 30, 15, 59, tzinfo=UTC)))
+        store.save(_decision(batch_id="may-1", decided_at=datetime(2026, 4, 30, 16, 0, tzinfo=UTC)))
         store.save(
             _decision(batch_id="may-2", decided_at=datetime(2026, 5, 20, 15, 30, tzinfo=UTC))
         )
-        store.save(_decision(batch_id="jun", decided_at=datetime(2026, 6, 1, 0, 0, tzinfo=UTC)))
+        store.save(_decision(batch_id="jun", decided_at=datetime(2026, 5, 31, 16, 0, tzinfo=UTC)))
 
         result = load_decisions_from_sqlite(db_file, "customerA", "2026-05")
         assert [d.batch_id for d in result] == ["may-1", "may-2"]
@@ -75,13 +75,15 @@ class TestLoadFromSqlite:
         assert [d.batch_id for d in result] == ["B-1"]
 
     def test_december_rolls_into_next_january(self, tmp_path: Path) -> None:
-        """Year wrap: 2026-12 must include Dec 31 but exclude Jan 1 of 2027."""
+        """Year wrap follows the Asia/Shanghai business calendar."""
         db_file = tmp_path / "d.db"
         store = DecisionStore(db_file)
         store.save(
-            _decision(batch_id="dec-31", decided_at=datetime(2026, 12, 31, 23, 59, tzinfo=UTC))
+            _decision(batch_id="dec-31", decided_at=datetime(2026, 12, 31, 15, 59, tzinfo=UTC))
         )
-        store.save(_decision(batch_id="jan-1", decided_at=datetime(2027, 1, 1, 0, 0, tzinfo=UTC)))
+        store.save(
+            _decision(batch_id="jan-1", decided_at=datetime(2026, 12, 31, 16, 0, tzinfo=UTC))
+        )
 
         result = load_decisions_from_sqlite(db_file, "customerA", "2026-12")
         assert [d.batch_id for d in result] == ["dec-31"]

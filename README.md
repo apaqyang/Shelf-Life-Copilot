@@ -140,7 +140,7 @@ Apache/GPL 的开源核心保证 **下载即用、源码可审、私有化部署
 | **企微回调 AES 加解密 + 签名校验** | — | 企业版插件 |
 | **ERP 对接插件**（SAP / 用友 / 金蝶 / 自研） | — | ⏳ v0.5+ |
 
-**当前指标**：391 测试 · 100% 覆盖率 · 21+ commits · CI 全绿
+**当前指标**：400+ 测试 · 100% 覆盖率 · CI 全绿
 
 ---
 
@@ -178,6 +178,8 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | **食品厂 IT 主管 5 分钟试用指南**（含 FAQ） |
 | [docs/TECH_SPEC.md](docs/TECH_SPEC.md) | 技术架构、数据模型、接口设计 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 / 依赖图 / 设计决策记录 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 项目演进计划、目标架构与里程碑验收门槛 |
+| [docs/DEVELOPMENT_TASKS.md](docs/DEVELOPMENT_TASKS.md) | 按优先级、依赖与验收条件组织的开发任务清单 |
 | [docs/demo_samples/](docs/demo_samples/) | 现成的卡片样本 + 月度 PDF 报告 |
 
 ---

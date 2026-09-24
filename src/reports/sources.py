@@ -12,13 +12,15 @@ month → [start, end) conversion has off-by-one risk and deserves tests.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from src.models import Decision
 from src.persistence import DecisionStore
 
 _MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+_BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _parse_month(month: str) -> tuple[int, int]:
@@ -36,12 +38,12 @@ def load_decisions_from_sqlite(
 ) -> list[Decision]:
     """Read all decisions for `customer_id` whose `decided_at` falls in `month`.
 
-    Window is [start_of_month, start_of_next_month) in UTC. Year-wraps correctly
-    for December → January. The store enforces tz-aware boundaries.
+    Window is [start_of_month, start_of_next_month) in the Asia/Shanghai
+    business calendar. Year-wraps correctly for December → January.
     """
     year, mo = _parse_month(month)
-    start = datetime(year, mo, 1, tzinfo=UTC)
+    start = datetime(year, mo, 1, tzinfo=_BUSINESS_TIMEZONE)
     end_year = year + (1 if mo == 12 else 0)
     end_mo = 1 if mo == 12 else mo + 1
-    end = datetime(end_year, end_mo, 1, tzinfo=UTC)
+    end = datetime(end_year, end_mo, 1, tzinfo=_BUSINESS_TIMEZONE)
     return DecisionStore(db_path).list_for_period(customer_id, start, end)

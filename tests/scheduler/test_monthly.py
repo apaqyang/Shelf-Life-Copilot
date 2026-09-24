@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from apscheduler.triggers.cron import CronTrigger
@@ -39,7 +40,7 @@ def populated_db(tmp_path: Path) -> Path:
     store = DecisionStore(db)
     # Run-time-anchored: scheduler uses datetime.now() to pick the "previous"
     # month, so seed a decision into _that_ window so the test is stable.
-    now = datetime.now(UTC)
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
     last_month_year = now.year if now.month > 1 else now.year - 1
     last_month = now.month - 1 if now.month > 1 else 12
     store.save(_decision(datetime(last_month_year, last_month, 15, 12, 0, tzinfo=UTC)))

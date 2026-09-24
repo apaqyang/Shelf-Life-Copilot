@@ -14,7 +14,7 @@ from pathlib import Path
 from src.reports.aggregator import MonthlyReportData, aggregate_monthly_report
 from src.reports.renderer import render_monthly_report_pdf
 from src.reports.sources import load_decisions_from_sqlite
-from src.repository import load_customer_config
+from src.repository import get_repository
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ def run_monthly_reports(
             )
             continue
 
-        config = load_customer_config(customer_id)
+        config = get_repository().load_customer_config(customer_id)
         data = aggregate_monthly_report(
             decisions=decisions,
             customer_id=customer_id,

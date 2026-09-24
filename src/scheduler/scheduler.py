@@ -28,6 +28,7 @@ class DailyScheduler:
         customer_ids: list[str],
         hour: int = 7,
         minute: int = 0,
+        timezone: str = "Asia/Shanghai",
         on_result: ScanResultCallback | None = None,
     ) -> None:
         if not customer_ids:
@@ -41,6 +42,7 @@ class DailyScheduler:
         self._customer_ids = customer_ids
         self._hour = hour
         self._minute = minute
+        self._timezone = timezone
         self._on_result = on_result
         self._scheduler = AsyncIOScheduler()
         self._register_jobs()
@@ -49,7 +51,11 @@ class DailyScheduler:
         for customer_id in self._customer_ids:
             self._scheduler.add_job(
                 self._run_one_customer,
-                trigger=CronTrigger(hour=self._hour, minute=self._minute),
+                trigger=CronTrigger(
+                    hour=self._hour,
+                    minute=self._minute,
+                    timezone=self._timezone,
+                ),
                 args=[customer_id],
                 id=f"scan-{customer_id}",
                 replace_existing=True,
