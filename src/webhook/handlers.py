@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from uuid import NAMESPACE_URL, uuid5
 
-from src.models import ActionType, Decision, DecisionOutcome
-from src.persistence import DecisionStore, SuggestionStore
+from src.models import ActionType, Decision, DecisionOutcome, WorkOrder
+from src.persistence import DecisionRepository, SuggestionRepository
 from src.repository import BatchRepository, get_repository
 from src.webhook.schemas import WecomEvent
 
@@ -53,8 +54,8 @@ def _parse_event_key(event_key: str) -> tuple[str, str, str]:
 
 def handle_click(
     event: WecomEvent,
-    store: DecisionStore,
-    suggestion_store: SuggestionStore | None = None,
+    store: DecisionRepository,
+    suggestion_store: SuggestionRepository | None = None,
     repository: BatchRepository | None = None,
 ) -> str:
     """Route a click event to the right side effect, return a short status line.
@@ -97,6 +98,28 @@ def handle_click(
         outcome=outcome,
         savings_estimate=savings_estimate,
     )
+    if outcome is DecisionOutcome.APPROVED:
+        idempotency_key = event.stable_event_id
+        work_order = WorkOrder(
+            work_order_id=str(uuid5(NAMESPACE_URL, idempotency_key)),
+            batch_id=batch.batch_id,
+            customer_id=customer_id,
+            material_name=batch.material_name,
+            action=action,
+            created_at=decision.decided_at,
+            updated_at=decision.decided_at,
+        )
+        rowid, persisted_order, created = store.record_approval(
+            decision,
+            work_order,
+            idempotency_key=idempotency_key,
+        )
+        verb = "Recorded" if created else "Already recorded"
+        return (
+            f"{verb} decision #{rowid} ({outcome.value}); "
+            f"work order {persisted_order.work_order_id}"
+        )
+
     rowid = store.save(decision)
     return f"Recorded decision #{rowid} ({outcome.value})"
 
@@ -104,7 +127,7 @@ def handle_click(
 def _resolve_action_and_savings(
     customer_id: str,
     batch_id: str,
-    suggestion_store: SuggestionStore | None,
+    suggestion_store: SuggestionRepository | None,
 ) -> tuple[ActionType, float]:
     """Return (action, savings_estimate) for the new Decision.
 

@@ -15,6 +15,11 @@ class TestDefaults:
         for k in (
             "APP_ENV",
             "LOG_LEVEL",
+            "API_TOKEN",
+            "WEBHOOK_REPLAY_WINDOW_SECONDS",
+            "MAX_REQUEST_BODY_BYTES",
+            "RATE_LIMIT_REQUESTS",
+            "RATE_LIMIT_WINDOW_SECONDS",
             "DECISIONS_DB_PATH",
             "REPORTS_OUTPUT_DIR",
             "SCAN_CUSTOMERS",
@@ -32,6 +37,9 @@ class TestDefaults:
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.app_env == "development"
+        assert s.is_development
+        assert s.api_token is None
+        assert s.webhook_replay_window_seconds == 300
         assert s.decisions_db_path == Path("data/decisions.db")
         assert s.reports_output_dir == Path("docs/demo_samples")
         assert s.scan_customers_list == ["customerA", "customerB"]
@@ -81,6 +89,18 @@ class TestEnvOverrides:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.wecom_webhook_url == "https://example.com/k"
         assert s.anthropic_api_key == "sk-test"
+
+    def test_security_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.setenv("API_TOKEN", "secret-token")
+        monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "1024")
+        monkeypatch.setenv("RATE_LIMIT_REQUESTS", "5")
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert not s.is_development
+        assert s.api_token is not None
+        assert s.api_token.get_secret_value() == "secret-token"
+        assert s.max_request_body_bytes == 1024
+        assert s.rate_limit_requests == 5
 
     def test_llm_provider_choices(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_PROVIDER", "moonshot")
@@ -140,6 +160,11 @@ class TestValidation:
     def test_invalid_day_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MONTHLY_DAY", "29")
         with pytest.raises(ValueError, match="monthly_day"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_non_positive_security_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("RATE_LIMIT_REQUESTS", "0")
+        with pytest.raises(ValueError, match="positive"):
             Settings(_env_file=None)  # type: ignore[call-arg]
 
 

@@ -14,6 +14,7 @@ from src.webhook import (
     PlaintextCrypto,
     WebhookCrypto,
     get_webhook_crypto,
+    require_secure_webhook_crypto,
     reset_webhook_crypto,
     set_webhook_crypto,
 )
@@ -58,3 +59,19 @@ class TestActiveCryptoSeam:
         set_webhook_crypto(PlaintextCrypto())
         reset_webhook_crypto()
         assert isinstance(get_webhook_crypto(), PlaintextCrypto)
+
+    def test_production_rejects_plaintext_but_development_allows_it(self) -> None:
+        require_secure_webhook_crypto(is_development=True)
+        with pytest.raises(RuntimeError, match="production requires"):
+            require_secure_webhook_crypto(is_development=False)
+
+    def test_production_accepts_secure_adapter(self) -> None:
+        class SecureCrypto:
+            def verify_url(self, echostr: str) -> str:
+                return echostr
+
+            def decrypt(self, ciphertext: str) -> str:
+                return ciphertext
+
+        set_webhook_crypto(SecureCrypto())
+        require_secure_webhook_crypto(is_development=False)

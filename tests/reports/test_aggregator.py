@@ -117,6 +117,45 @@ class TestAggregateTotals:
         assert data.total_savings_actual == pytest.approx(26500.0)
         # Estimate (approved subset): 8500 + 9000 + 6500 + 3200 = 27200
         assert data.total_savings_estimate == pytest.approx(27200.0)
+        assert data.executed_count == 4
+        assert data.verified_count == 4
+        assert data.total_savings_executed_estimate == pytest.approx(27200.0)
+
+    def test_estimated_executed_and_verified_savings_are_not_conflated(self) -> None:
+        approved_only = _decision(
+            batch_id="approved",
+            action=ActionType.TRANSFORM,
+            outcome=DecisionOutcome.APPROVED,
+            estimate=1000,
+            actual=None,
+        )
+        executed_unverified = _decision(
+            batch_id="executed",
+            action=ActionType.TRANSFORM,
+            outcome=DecisionOutcome.APPROVED,
+            estimate=2000,
+            actual=None,
+        ).model_copy(update={"actual_qty": 10})
+        verified = _decision(
+            batch_id="verified",
+            action=ActionType.TRANSFORM,
+            outcome=DecisionOutcome.APPROVED,
+            estimate=3000,
+            actual=2500,
+        )
+        data = aggregate_monthly_report(
+            decisions=[approved_only, executed_unverified, verified],
+            customer_id="customerA",
+            industry="frozen_seafood",
+            month="2026-05",
+            annual_baseline_loss=1_500_000,
+        )
+        assert data.total_savings_estimate == 6000
+        assert data.executed_count == 2
+        assert data.total_savings_executed_estimate == 5000
+        assert data.verified_count == 1
+        assert data.total_savings_actual == 2500
+        assert [case.batch_id for case in data.case_studies] == ["verified"]
 
 
 class TestTopActions:

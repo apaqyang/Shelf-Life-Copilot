@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.alerts import scan_batch
 from src.models import Alert, Card, Suggestion
-from src.persistence import SuggestionStore
+from src.persistence import SuggestionRepository
 from src.repository import BatchRepository, JsonRepository, get_repository
 from src.suggestion import SuggestionEngine
 from src.wecom import render_card_for_alert
@@ -43,6 +43,7 @@ class ScanResult(BaseModel):
     suggestions: list[Suggestion]
     cards: list[Card] = Field(default_factory=list)
     errors: list[ScanError]
+    batch_ids: list[str] = Field(default_factory=list)
 
 
 class ScanRunner:
@@ -52,7 +53,7 @@ class ScanRunner:
         self,
         engine: SuggestionEngine | None = None,
         data_root: Path | None = None,
-        suggestion_store: SuggestionStore | None = None,
+        suggestion_store: SuggestionRepository | None = None,
         repository: BatchRepository | None = None,
     ) -> None:
         self._engine = engine
@@ -119,6 +120,7 @@ class ScanRunner:
             suggestions=suggestions,
             cards=cards,
             errors=errors,
+            batch_ids=[batch.batch_id for batch in batches],
         )
 
     async def revise_for_batch(
@@ -174,4 +176,5 @@ class ScanRunner:
             suggestions=suggestions,
             cards=cards,
             errors=errors,
+            batch_ids=[batch.batch_id],
         )

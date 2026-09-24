@@ -134,13 +134,16 @@ Apache/GPL 的开源核心保证 **下载即用、源码可审、私有化部署
 | 改方案单轮重生成 | `src/scheduler/runner.py::revise_for_batch` | ✅ |
 | 决策日志 SQLite 持久化 | `src/persistence/DecisionStore` | ✅ |
 | 建议日志 SQLite（让 webhook click 拿真实 action/savings） | `src/persistence/SuggestionStore` | ✅ |
+| 同意决策 + 工单原子创建（重复点击幂等） | `src/persistence/WorkOrderStore` | ✅ |
+| 工单完成回执 + 已核实节省月报 | `POST /api/work-orders/{id}/complete` | ✅ |
+| 认证手动扫描 API（限流/幂等） | `POST /api/scans` | ✅ |
 | 月度 PDF 报告 + 摘要卡 + cron 定时 | `src/reports/` + `src/scheduler/monthly.py` | ✅ |
-| 路径 B 企微回调（plaintext 骨架） | `src/webhook/` | ✅ |
+| 路径 B 企微回调（去重/重放保护） | `src/webhook/` | ✅（生产需安全 crypto 插件） |
 | 长跑服务入口（FastAPI lifespan + 调度器） | `src/runtime/lifespan.py` | ✅ |
 | **企微回调 AES 加解密 + 签名校验** | — | 企业版插件 |
 | **ERP 对接插件**（SAP / 用友 / 金蝶 / 自研） | — | ⏳ v0.5+ |
 
-**当前指标**：400+ 测试 · 100% 覆盖率 · CI 全绿
+**当前指标**：460+ 测试 · 100% 覆盖率 · CI 全绿
 
 ---
 

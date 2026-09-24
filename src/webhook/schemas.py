@@ -6,6 +6,8 @@ WeCom serializes its callback as PascalCase XML/JSON; we accept JSON in v0.1
 
 from __future__ import annotations
 
+import hashlib
+
 from pydantic import BaseModel, ConfigDict, alias_generators
 
 
@@ -29,6 +31,24 @@ class WecomEvent(BaseModel):
     event: str | None = None
     event_key: str | None = None
     content: str | None = None
+    msg_id: str | None = None
+
+    @property
+    def stable_event_id(self) -> str:
+        if self.msg_id:
+            return f"wecom:{self.msg_id}"
+        canonical = "\x1f".join(
+            (
+                self.to_user_name,
+                self.from_user_name,
+                str(self.create_time),
+                self.msg_type,
+                self.event or "",
+                self.event_key or "",
+                self.content or "",
+            )
+        )
+        return f"wecom:{hashlib.sha256(canonical.encode()).hexdigest()}"
 
 
 class WecomCallbackResponse(BaseModel):

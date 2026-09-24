@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # ── infra ─────────────────────────────────────────────────────────────
     app_env: str = "development"
     log_level: str = "INFO"
+    api_token: SecretStr | None = None
+    webhook_replay_window_seconds: int = 300
+    max_request_body_bytes: int = 65_536
+    rate_limit_requests: int = 60
+    rate_limit_window_seconds: int = 60
 
     # ── persistence / output ──────────────────────────────────────────────
     decisions_db_path: Path = Path("data/decisions.db")
@@ -80,6 +85,22 @@ class Settings(BaseSettings):
         if not 1 <= v <= 28:
             raise ValueError(f"monthly_day must be 1..28, got {v}")
         return v
+
+    @field_validator(
+        "webhook_replay_window_seconds",
+        "max_request_body_bytes",
+        "rate_limit_requests",
+        "rate_limit_window_seconds",
+    )
+    @classmethod
+    def _validate_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("security limits must be positive")
+        return v
+
+    @property
+    def is_development(self) -> bool:
+        return self.app_env.casefold() in {"development", "dev", "local", "test", "testing"}
 
     @property
     def scan_customers_list(self) -> list[str]:

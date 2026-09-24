@@ -8,6 +8,7 @@ from src.models.customer import CustomerConfig
 from src.models.decision import Decision, DecisionOutcome
 from src.models.suggestion import Suggestion
 from src.models.thresholds import AlertThresholds
+from src.models.work_order import WorkOrder, WorkOrderReceipt, WorkOrderStatus
 
 __all__ = [
     "ActionType",
@@ -22,4 +23,7 @@ __all__ = [
     "DecisionOutcome",
     "Severity",
     "Suggestion",
+    "WorkOrder",
+    "WorkOrderReceipt",
+    "WorkOrderStatus",
 ]

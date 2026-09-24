@@ -7,11 +7,12 @@ that separation lets us test them with a `:memory:` store and zero HTTP setup.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from src.models import ActionType, Batch, DecisionOutcome, Suggestion
-from src.persistence import DecisionStore, SuggestionStore
+from src.persistence import DecisionStore, SuggestionStore, WorkOrderStore
 from src.webhook.handlers import (
     UnknownActionError,
     UnknownBatchError,
@@ -84,6 +85,26 @@ class TestHandleClick:
         assert d.customer_id == "customerA"
         assert d.material_name == "冷冻虾仁"  # resolved from batches/customerA.json
         assert d.outcome is DecisionOutcome.APPROVED
+
+    def test_approve_creates_one_work_order_and_repeated_click_is_idempotent(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "flow.db"
+        store = DecisionStore(path)
+        first = handle_click(_click("approve:customerA:A-001"), store)
+        second = handle_click(_click("approve:customerA:A-001"), store)
+        with WorkOrderStore(path) as orders:
+            order = orders.get_for_batch("customerA", "A-001")
+        rows = store.list_for_period(
+            "customerA",
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            end=datetime(2027, 1, 1, tzinfo=UTC),
+        )
+        store.close()
+        assert "work order" in first
+        assert "Already recorded" in second
+        assert order is not None
+        assert len(rows) == 1
 
     def test_snooze_writes_decision_with_snoozed_outcome(self) -> None:
         store = DecisionStore(":memory:")

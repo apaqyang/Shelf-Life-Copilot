@@ -188,9 +188,10 @@ def render_monthly_summary_card(data: MonthlyReportData) -> Card:
     body = (
         f"## 📊 【上月业绩报告】{data.customer_id} · {data.month}\n"
         f"\n"
-        f"**节省总额（实际）**：**¥{data.total_savings_actual:,.0f}**\n"
+        f"**节省总额（回执已核实）**：**¥{data.total_savings_actual:,.0f}**\n"
         f"**决策条数**：{data.total_count}（同意 {data.approved_count} · "
         f"同意率 {data.approval_rate:.0%}）\n"
+        f"**执行 / 核实**：{data.executed_count} / {data.verified_count}\n"
         f"**ROI**：{data.roi_multiple:.1f}x 月费\n"
         f"\n"
         f"**最佳动作**：\n"

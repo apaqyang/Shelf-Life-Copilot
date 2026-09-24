@@ -61,8 +61,11 @@ class MonthlyReportData(BaseModel):
     month: Annotated[str, StringConstraints(pattern=_MONTH_PATTERN)]
     total_count: int = Field(ge=0)
     approved_count: int = Field(ge=0)
+    executed_count: int = Field(default=0, ge=0)
+    verified_count: int = Field(default=0, ge=0)
     approval_rate: float = Field(ge=0.0, le=1.0)
     total_savings_estimate: NonNegativeFloat
+    total_savings_executed_estimate: NonNegativeFloat = 0.0
     total_savings_actual: NonNegativeFloat
     top_actions: list[ActionTally]
     case_studies: list[Decision]
@@ -94,10 +97,15 @@ def aggregate_monthly_report(
     total_count = len(decisions)
     approved = [d for d in decisions if d.is_approved]
     approved_count = len(approved)
+    executed = [d for d in approved if d.actual_qty is not None]
+    verified = [d for d in approved if d.actual_savings is not None]
+    executed_count = len(executed)
+    verified_count = len(verified)
     approval_rate = (approved_count / total_count) if total_count else 0.0
 
     total_savings_estimate = sum(d.savings_estimate for d in approved)
-    total_savings_actual = sum(d.actual_savings or 0.0 for d in approved)
+    total_savings_executed_estimate = sum(d.savings_estimate for d in executed)
+    total_savings_actual = sum(d.actual_savings or 0.0 for d in verified)
 
     # Group approved decisions by action; sum actual savings; sort desc; cap at 5.
     by_action: dict[ActionType, list[Decision]] = defaultdict(list)
@@ -113,9 +121,8 @@ def aggregate_monthly_report(
     ]
     top_actions = sorted(tallies, key=lambda t: t.total_actual_savings, reverse=True)[:5]
 
-    # Case studies: top 3 by actual savings, excluding decisions without actual numbers.
-    executed = [d for d in approved if d.actual_savings is not None]
-    case_studies = sorted(executed, key=lambda d: d.actual_savings or 0.0, reverse=True)[:3]
+    # Case studies only use verified receipts, never unexecuted estimates.
+    case_studies = sorted(verified, key=lambda d: d.actual_savings or 0.0, reverse=True)[:3]
 
     monthly_fee = _monthly_subscription_fee(annual_baseline_loss)
     roi_multiple = (total_savings_actual / monthly_fee) if monthly_fee else 0.0
@@ -126,8 +133,11 @@ def aggregate_monthly_report(
         month=month,
         total_count=total_count,
         approved_count=approved_count,
+        executed_count=executed_count,
+        verified_count=verified_count,
         approval_rate=approval_rate,
         total_savings_estimate=total_savings_estimate,
+        total_savings_executed_estimate=total_savings_executed_estimate,
         total_savings_actual=total_savings_actual,
         top_actions=top_actions,
         case_studies=case_studies,

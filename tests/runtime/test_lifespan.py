@@ -87,6 +87,50 @@ class TestLifespanWithoutLlmKey:
         # After context exit, shutdown() has been called; job removal is APScheduler's
         # contract and we don't re-assert it here.
 
+    def test_lifespan_owns_and_closes_persistence_connections(
+        self, base_settings: Settings
+    ) -> None:
+        app = FastAPI(lifespan=build_lifespan(base_settings))
+        for _ in _make_client(app):
+            decision_store = app.state.decision_store
+            suggestion_store = app.state.suggestion_store
+            work_order_store = app.state.work_order_store
+            idempotency_store = app.state.idempotency_store
+            assert decision_store.closed is False
+            assert suggestion_store.closed is False
+            assert work_order_store.closed is False
+            assert idempotency_store.closed is False
+        assert decision_store.closed is True
+        assert suggestion_store.closed is True
+        assert work_order_store.closed is True
+        assert idempotency_store.closed is True
+
+    def test_production_refuses_plaintext_webhook_crypto(self, base_settings: Settings) -> None:
+        from src.webhook import reset_webhook_crypto
+
+        reset_webhook_crypto()
+        settings = base_settings.model_copy(update={"app_env": "production"})
+        app = FastAPI(lifespan=build_lifespan(settings))
+        with pytest.raises(RuntimeError, match="secure webhook crypto"), TestClient(app):
+            pass
+
+    def test_production_starts_with_secure_webhook_crypto(self, base_settings: Settings) -> None:
+        from src.webhook import reset_webhook_crypto, set_webhook_crypto
+
+        class SecureCrypto:
+            def verify_url(self, echostr: str) -> str:
+                return echostr
+
+            def decrypt(self, ciphertext: str) -> str:
+                return ciphertext
+
+        set_webhook_crypto(SecureCrypto())
+        settings = base_settings.model_copy(update={"app_env": "production"})
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert app.state.settings is settings
+        reset_webhook_crypto()
+
 
 class TestLifespanWithLlmKey:
     def test_daily_scheduler_started_when_provider_key_present(

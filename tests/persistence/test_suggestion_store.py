@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.models import ActionType, Suggestion
-from src.persistence import SuggestionStore
+from src.persistence import SuggestionRepository, SuggestionStore
 
 
 def _make_suggestion(
@@ -196,3 +196,13 @@ class TestTimezoneFidelity:
         assert got is not None
         assert got.generated_at == s.generated_at
         assert got.generated_at.tzinfo is not None
+
+
+def test_store_satisfies_protocol_and_context_closes() -> None:
+    store = SuggestionStore(":memory:")
+    assert isinstance(store, SuggestionRepository)
+    assert store.schema_version > 0
+    assert store.closed is False
+    with store as entered:
+        assert entered is store
+    assert store.closed is True

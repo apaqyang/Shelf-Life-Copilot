@@ -46,4 +46,5 @@ def load_decisions_from_sqlite(
     end_year = year + (1 if mo == 12 else 0)
     end_mo = 1 if mo == 12 else mo + 1
     end = datetime(end_year, end_mo, 1, tzinfo=_BUSINESS_TIMEZONE)
-    return DecisionStore(db_path).list_for_period(customer_id, start, end)
+    with DecisionStore(db_path) as store:
+        return store.list_for_period(customer_id, start, end)

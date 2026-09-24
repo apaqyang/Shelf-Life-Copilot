@@ -2,7 +2,7 @@
 
 > 配套：[ARCHITECTURE.md](ARCHITECTURE.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)
 > 阶段：v0.1（Mock Demo）
-> 更新日期：2026-05-26
+> 更新日期：2026-09-24
 
 ---
 
@@ -40,7 +40,7 @@
 | 任务调度 | APScheduler | 每日 07:00 扫描 |
 | LLM | `anthropic` Python SDK | Sonnet 4.6 默认 / Opus 4.7 复杂 / Haiku 4.5 改方案 |
 | 企微 | 企业微信群机器人 + 应用消息 API | |
-| 存储 | SQLite (v0.1) → PostgreSQL (v0.5+) | |
+| 存储 | SQLite（schema migration + WAL）→ PostgreSQL | 业务层依赖 Repository Protocol |
 | 测试 | pytest + pytest-asyncio | |
 | 包管理 | uv | |
 | 代码质量 | ruff + black + mypy | |
@@ -102,6 +102,25 @@ final_action: str
 actual_savings: float | None  # 工单完成后回填
 ```
 
+### WorkOrder（处置工单）
+```python
+work_order_id: str
+batch_id: str
+customer_id: str
+material_name: str
+action: ActionType
+status: enum  # pending / in_progress / completed / cancelled
+created_at: datetime  # 必须带时区
+updated_at: datetime  # 必须带时区，不得早于 created_at
+actual_qty: float | None
+actual_savings: float | None
+completed_by: str | None
+completed_at: datetime | None
+completion_source: str | None
+```
+
+正常完成路径为 `pending → in_progress → completed`；`pending` 和 `in_progress` 也可转为 `cancelled`，终态不可逆转。企微“同意”回调在同一 SQLite 事务中写入 Decision 和 WorkOrder，重复回调返回原工单。工单完成时，回执与对应 Decision 的实绩字段在同一事务中更新。
+
 ### CustomerConfig（客户配置 — JSON 文件）
 ```python
 customer_id: str
@@ -117,19 +136,20 @@ decision_makers: list[str]  # 企微 userid
 
 ## 4. 核心接口
 
-### 4.1 `POST /alerts/scan`
-触发批次扫描（手动 / APScheduler 定时调用）。
-- Request: `{"customer_id": "customerA"}` 或为空（扫描全部）
-- Response: `{"alerts_generated": 5, "cards_sent": 5}`
+### 4.1 `POST /api/scans`
+使用 `Authorization: Bearer <API_TOKEN>` 和 `Idempotency-Key` 手动触发单客户扫描，内部复用 `ScanRunner`。
+- Request: `{"customer_id": "customerA", "today": "2026-05-26", "skip_llm": false}`
+- Response: 批次数、预警数、建议数、卡片数，以及全部扫描批次的成功/失败摘要
+- 相同幂等键完成后返回首次结果；正在处理时返回 `409`
 
 ### 4.2 `POST /webhook/wecom`
 企微回调入口，处理：
 - 按钮事件：同意 / 稍后 / 改方案
-- 文字反馈：进入改方案单轮重生成
-- 工单回执：车间"已完成"按钮
+- 校验回调时间窗（默认 5 分钟）并持久化去重
+- 生产环境拒绝明文回调加密实现
 
-### 4.3 `GET /customers/{id}/decisions`
-查询客户历史决策（管理后台用，v0.5 接入）。
+### 4.3 `POST /api/work-orders/{work_order_id}/complete`
+使用 Bearer token、`Idempotency-Key` 和 `X-Operator-ID` 提交车间完成回执。仅 `in_progress` 工单可完成；服务端记录 UTC 完成时间，并原子回填关联 Decision 的实际数量和实际节省。
 
 ### 4.4 内部：`suggest(batch, customer_config) → Suggestion`
 LLM 建议生成器核心函数。
@@ -205,10 +225,16 @@ LLM 建议生成器核心函数。
 ## 7. 部署（v0.1）
 
 - 本地 `docker-compose up`（Python 服务 + SQLite 卷）
+- SQLite 启动时自动执行带版本迁移；迁移单版本事务失败时回滚
+- 运行时使用 WAL、5 秒 busy timeout 和显式连接关闭
 - 环境变量：
   - `ANTHROPIC_API_KEY`
   - `WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET`
   - `WECOM_TEST_GROUP_ID`（Demo 推送目标群）
+  - `API_TOKEN`（`/api/*` Bearer token）
+  - `WEBHOOK_REPLAY_WINDOW_SECONDS`
+  - `MAX_REQUEST_BODY_BYTES`
+  - `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS`
 - v0.5+：客户私有化部署支持（VPC / 厂内服务器）
 
 ---
@@ -218,6 +244,9 @@ LLM 建议生成器核心函数。
 - LLM 不直接执行任何动作，**仅生成建议**
 - 所有 prompt + 模型响应留痕（用于追溯）
 - 越界请求即便生成卡片，工单生成前需运营/实施二次确认
+- 生产环境启动时强制使用安全的企微消息加密适配器
+- 企微回调使用时间窗校验和 SQLite 幂等记录防重放
+- 写接口使用请求体上限和按来源/路径的滑动窗口限流；`/api/*` 还要求 Bearer token
 - v0.5+ 支持私有化部署，库存数据不出客户网
 
 ---
@@ -236,5 +265,5 @@ LLM 建议生成器核心函数。
 - ERP / WMS 真实对接
 - 多租户隔离的鉴权设计
 - 跨批次联合优化（v1.5）
-- 月度 PDF 报告生成（v0.5）
-- 工单完成情况的反向校准（v0.5）
+- 报告自动定时生成与分发
+- 工单实绩驱动的模型反向校准

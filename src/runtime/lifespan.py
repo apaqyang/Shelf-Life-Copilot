@@ -18,7 +18,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 
-from src.persistence import SuggestionStore
+from src.persistence import DecisionStore, IdempotencyStore, SuggestionStore, WorkOrderStore
 from src.plugins import PluginRegistry, load_plugins
 from src.reports import ReportRunResult
 from src.runtime.config import Settings
@@ -37,6 +37,7 @@ from src.suggestion import (
     build_moonshot_provider,
     build_offline_provider,
 )
+from src.webhook import require_secure_webhook_crypto
 from src.wecom import (
     DryRunWecomClient,
     WebhookWecomClient,
@@ -117,13 +118,23 @@ def build_lifespan(
     async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry = PluginRegistry(app=app, settings=settings)
         load_plugins(registry)
+        require_secure_webhook_crypto(is_development=settings.is_development)
         app.state.loaded_plugins = registry.loaded
+        app.state.settings = settings
         if registry.loaded:
             logger.info("Enterprise plugins loaded: %s", registry.loaded)
         else:
             logger.info("Pure open-source mode (no enterprise plugins).")
 
         wecom_client = _build_wecom_client(settings)
+        decision_store = DecisionStore(settings.decisions_db_path)
+        suggestion_store = SuggestionStore(settings.decisions_db_path)
+        work_order_store = WorkOrderStore(settings.decisions_db_path)
+        idempotency_store = IdempotencyStore(settings.decisions_db_path)
+        app.state.decision_store = decision_store
+        app.state.suggestion_store = suggestion_store
+        app.state.work_order_store = work_order_store
+        app.state.idempotency_store = idempotency_store
 
         monthly = MonthlyReportScheduler(
             db_path=settings.decisions_db_path,
@@ -144,6 +155,9 @@ def build_lifespan(
         )
 
         provider = _build_provider(settings)
+        engine = SuggestionEngine(provider=provider) if provider is not None else None
+        runner = ScanRunner(engine=engine, suggestion_store=suggestion_store)
+        app.state.scan_runner = runner
         if provider is None:
             logger.warning(
                 "No LLM API key for provider %r; DailyScheduler not started.",
@@ -151,12 +165,6 @@ def build_lifespan(
             )
             app.state.daily_scheduler = None
         else:
-            # Share the decisions DB file with both stores — two tables, one sqlite.
-            suggestion_store = SuggestionStore(settings.decisions_db_path)
-            runner = ScanRunner(
-                engine=SuggestionEngine(provider=provider),
-                suggestion_store=suggestion_store,
-            )
             daily = DailyScheduler(
                 runner=runner,
                 customer_ids=settings.scan_customers_list,
@@ -180,6 +188,10 @@ def build_lifespan(
             daily_sched = app.state.daily_scheduler
             if daily_sched is not None:
                 daily_sched.shutdown()
+            idempotency_store.close()
+            work_order_store.close()
+            suggestion_store.close()
+            decision_store.close()
             logger.info("Schedulers shut down cleanly.")
 
     return _lifespan

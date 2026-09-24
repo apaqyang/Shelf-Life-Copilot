@@ -2,7 +2,7 @@
 
 > 阶段：v0.1（Mock Demo）
 > 配套文档：[TECH_SPEC.md](TECH_SPEC.md) · [ROADMAP.md](ROADMAP.md) · [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)
-> 更新日期：2026-05-27
+> 更新日期：2026-09-24
 
 本文档讲清楚**代码长什么样**——分层、依赖方向、关键模块的边界。
 面向：新加入的工程师、客户 IT 评估、未来回头看 trade-off 的自己。
@@ -16,7 +16,7 @@
 │                       Entry Points                          │
 │   ┌────────────────┐         ┌────────────────────────┐   │
 │   │  src/cli.py    │         │  src/main.py (FastAPI) │   │
-│   │  one-shot scan │         │  /health (placeholder) │   │
+│   │  one-shot scan │         │  webhook + command API │   │
 │   └────────┬───────┘         └────────┬───────────────┘   │
 │            │                          │                    │
 └────────────┼──────────────────────────┼────────────────────┘
@@ -93,7 +93,11 @@ data models (models/) ──► (no dependencies, leaf layer)
 ```
 src/
 ├── cli.py                      # 入口 ① 一次性扫描的 CLI
-├── main.py                     # 入口 ② FastAPI app（v0.1 仅 /health）
+├── main.py                     # 入口 ② FastAPI app（health/webhook/command API）
+│
+├── api/                        # Bearer 鉴权的手动扫描 / 工单完成命令
+│   ├── router.py               # 幂等命令处理与 HTTP 错误映射
+│   └── schemas.py              # API request/response contracts
 │
 ├── models/                     # 数据契约层（叶子层，无业务依赖）
 │   ├── action.py               # ActionType (StrEnum)
@@ -101,7 +105,8 @@ src/
 │   ├── batch.py                # Batch + Severity
 │   ├── customer.py             # CustomerConfig（含不变量校验）
 │   ├── suggestion.py           # Suggestion
-│   └── thresholds.py           # AlertThresholds
+│   ├── thresholds.py           # AlertThresholds
+│   └── work_order.py           # WorkOrder + 状态转移不变量
 │
 ├── alerts/                     # 业务层 · 监测引擎（纯函数，无 IO）
 │   └── monitor.py              # calculate_days_left / classify_severity / scan_batch
@@ -114,6 +119,18 @@ src/
 │
 ├── repository/                 # I/O 层 · JSON 加载
 │   └── loader.py               # load_customer_config / load_batches
+│
+├── persistence/                # 持久化 port + SQLite adapter
+│   ├── protocols.py            # Decision/Suggestion/WorkOrder Repository
+│   ├── migrations.py           # 带版本、事务化 schema 迁移
+│   ├── sqlite.py               # WAL / busy timeout / 连接生命周期
+│   └── *_store.py              # SQLite 具体实现
+│
+├── runtime/                    # 应用装配、配置与横切安全控制
+│   ├── lifespan.py             # 插件加载、存储与 runner 生命周期
+│   └── security.py             # Bearer auth / body limit / rate limit
+│
+├── webhook/                    # 企微回调校验、持久化去重与决策路由
 │
 ├── scheduler/                  # 编排层
 │   ├── runner.py               # ScanRunner + ScanResult + ScanError
@@ -288,10 +305,11 @@ tests/
 | 真实 ERP / WMS 对接 | 开源核心提供 `BatchRepository` 插件边界 | SAP / 用友 / 金蝶适配器作为企业插件部署 |
 | 企微卡片渲染 | ✅ `src/wecom/cards.py`（4 模板，纯函数） | — |
 | 企微真实推送 | ✅ 群机器人 webhook | 交互式应用消息由企业插件提供 |
-| 决策日志持久化（Decision 表） | ✅ SQLite | v0.5+ 可迁移 PostgreSQL |
+| 决策与工单持久化 | ✅ SQLite，同意决策与工单原子写入 | v0.5+ 可迁移 PostgreSQL |
 | 改方案的多轮对话 | ❌（仅支持单轮） | 保持单轮；后续评估见 `ROADMAP.md` |
 | 月度 PDF 报告 | ✅ `src/reports/`（reportlab + STSong-Light CID 中文） | 接持久化决策日志驱动数据源 + 定时触发 |
-| 多租户隔离的鉴权 | ❌ | FastAPI 接口层做 JWT |
+| 命令接口鉴权 | ✅ 静态 Bearer token | 租户级 JWT / RBAC |
+| 回调防重放 | ✅ 时间窗校验 + SQLite 幂等记录 | 多实例共享存储 |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
 
 ---
@@ -301,10 +319,12 @@ tests/
 | 关注点 | v0.1 实现 | 演进方向 |
 |---|---|---|
 | 日志 | `logging.basicConfig` 在 CLI 入口 | v0.5 结构化 JSON + correlation_id |
-| 配置（API key 等） | 环境变量 (`os.environ`) | v0.5 pydantic-settings Settings 类 |
+| 配置（API key 等） | `pydantic-settings` 从环境变量加载并校验 | 外部 secrets manager |
 | 错误处理 | per-batch try/except，ScanError 留痕 | + retry policy（指数退避） |
-| 并发 | scan 循环串行（每批次串行调 LLM） | v0.5 用 `asyncio.gather` 并行多批次 |
-| 时区 | 用户输入 `--today` 是本地日期 | v0.5 确认是否考虑客户跨时区 |
+| 并发 | scan 循环串行；SQLite WAL + 5s busy timeout + 连接内锁 | 对 LLM 调用增加有界并发 |
+| 时区 | 持久化统一 UTC，调度/月报按 `Asia/Shanghai` 业务日历 | 按租户配置业务时区 |
+| 数据库生命周期 | FastAPI lifespan 拥有长连接，短任务使用 context manager | PostgreSQL 连接池 adapter |
+| 接口安全 | 生产环境安全回调加密；Bearer auth；body/rate limit；持久化幂等 | 分布式限流与密钥轮换 |
 
 ---
 

@@ -1,49 +1,51 @@
-"""SQLite store for LLM Suggestion entries.
-
-Read by the webhook click handler so a 总监 ✅ 同意 click translates into a
-Decision with the *real* action and savings_estimate (not TRANSFORM/0.0
-placeholders). One row per LLM call; `latest_for_batch` returns the most
-recent one keyed by (customer_id, batch_id).
-"""
+"""SQLite adapter for LLM suggestion entries."""
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from types import TracebackType
+from typing import cast
 
 from src.models import ActionType, Suggestion
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS suggestions (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id          TEXT    NOT NULL,
-    customer_id       TEXT    NOT NULL,
-    action            TEXT    NOT NULL,
-    savings_estimate  REAL    NOT NULL,
-    rationale         TEXT    NOT NULL,
-    confidence        REAL    NOT NULL,
-    is_standard       INTEGER NOT NULL,
-    llm_model         TEXT    NOT NULL,
-    user_feedback     TEXT,
-    generated_at      TEXT    NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_suggestions_lookup
-    ON suggestions(customer_id, batch_id, generated_at DESC);
-"""
+from src.persistence.sqlite import SQLiteDatabase
 
 
 class SuggestionStore:
-    """Persist + look up the latest Suggestion per (customer_id, batch_id)."""
+    """Persist and look up the latest suggestion for a customer batch."""
 
-    def __init__(self, db_path: Path | str) -> None:
-        # check_same_thread=False: FastAPI may dispatch requests on a worker
-        # thread pool; v0.1 traffic is one write at a time so no concurrency risk.
-        self._conn = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
-        self._conn.executescript(_SCHEMA)
+    def __init__(
+        self,
+        db_path: Path | str,
+        *,
+        busy_timeout_ms: int = 5_000,
+    ) -> None:
+        self._db = SQLiteDatabase(db_path, busy_timeout_ms=busy_timeout_ms)
+
+    @property
+    def closed(self) -> bool:
+        return self._db.closed
+
+    @property
+    def schema_version(self) -> int:
+        return self._db.schema_version
+
+    def __enter__(self) -> SuggestionStore:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._db.close()
 
     def save(self, suggestion: Suggestion) -> int:
-        cur = self._conn.execute(
+        cur = self._db.execute(
             """
             INSERT INTO suggestions (
                 batch_id, customer_id, action, savings_estimate,
@@ -58,18 +60,17 @@ class SuggestionStore:
                 suggestion.savings_estimate,
                 suggestion.rationale,
                 suggestion.confidence,
-                1 if suggestion.is_standard else 0,
+                int(suggestion.is_standard),
                 suggestion.llm_model,
                 suggestion.user_feedback,
                 suggestion.generated_at.astimezone(UTC).isoformat(),
             ),
         )
-        assert cur.lastrowid is not None  # noqa: S101  (sqlite INSERT contract)
+        assert cur.lastrowid is not None  # noqa: S101 - sqlite INSERT contract
         return cur.lastrowid
 
     def latest_for_batch(self, customer_id: str, batch_id: str) -> Suggestion | None:
-        """Return the most-recently-generated suggestion for this batch, or None."""
-        row = self._conn.execute(
+        row = self._db.fetchone(
             """
             SELECT batch_id, customer_id, action, savings_estimate,
                    rationale, confidence, is_standard, llm_model,
@@ -80,20 +81,18 @@ class SuggestionStore:
             LIMIT 1
             """,
             (customer_id, batch_id),
-        ).fetchone()
-
+        )
         if row is None:
             return None
-
         return Suggestion(
-            batch_id=row[0],
-            customer_id=row[1],
-            action=ActionType(row[2]),
-            savings_estimate=row[3],
-            rationale=row[4],
-            confidence=row[5],
+            batch_id=str(row[0]),
+            customer_id=str(row[1]),
+            action=ActionType(str(row[2])),
+            savings_estimate=cast(float, row[3]),
+            rationale=str(row[4]),
+            confidence=cast(float, row[5]),
             is_standard=bool(row[6]),
-            llm_model=row[7],
-            user_feedback=row[8],
-            generated_at=datetime.fromisoformat(row[9]),
+            llm_model=str(row[7]),
+            user_feedback=None if row[8] is None else str(row[8]),
+            generated_at=datetime.fromisoformat(str(row[9])),
         )

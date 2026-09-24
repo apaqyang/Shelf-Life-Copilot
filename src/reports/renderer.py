@@ -103,7 +103,7 @@ def _cover(data: MonthlyReportData, st: dict[str, ParagraphStyle]) -> list[Any]:
             st["body"],
         ),
         Spacer(1, 3 * cm),
-        Paragraph("本月累计节省", st["h2"]),
+        Paragraph("本月已核实节省", st["h2"]),
         Paragraph(f"¥ {data.total_savings_actual:,.0f}", st["huge"]),
         Spacer(1, 0.8 * cm),
         Paragraph(
@@ -122,8 +122,10 @@ def _adoption_section(data: MonthlyReportData, st: dict[str, ParagraphStyle]) ->
         ["总预警批次", f"{data.total_count}"],
         ["AI 建议被采纳", f"{data.approved_count}"],
         ["采纳率", f"{data.approval_rate:.0%}"],
-        ["AI 估算累计节省", f"¥ {data.total_savings_estimate:,.0f}"],
-        ["实际累计节省（已执行）", f"¥ {data.total_savings_actual:,.0f}"],
+        ["已执行 / 已核实", f"{data.executed_count} / {data.verified_count}"],
+        ["采纳方案预估节省", f"¥ {data.total_savings_estimate:,.0f}"],
+        ["已执行方案原预估", f"¥ {data.total_savings_executed_estimate:,.0f}"],
+        ["回执已核实实际节省", f"¥ {data.total_savings_actual:,.0f}"],
     ]
     table = Table(rows, colWidths=[8 * cm, 6 * cm])
     table.setStyle(_table_style())
@@ -200,10 +202,10 @@ def _roi_section(data: MonthlyReportData, st: dict[str, ParagraphStyle]) -> list
         ["项", "金额"],
         ["年度报损 baseline", f"¥ {data.annual_baseline_loss:,.0f}"],
         ["本月 AI 投入（按 v1.0 分档年费摊月）", f"¥ {data.monthly_subscription_fee:,.0f}"],
-        ["本月实际节省", f"¥ {data.total_savings_actual:,.0f}"],
+        ["本月回执已核实节省", f"¥ {data.total_savings_actual:,.0f}"],
         ["按本月年化节省（×12）", f"¥ {annualized_savings:,.0f}"],
         ["年度报损降幅（年化估算）", f"{reduction_rate:.0%}"],
-        ["本月 ROI 倍数（实际节省 / AI 投入）", f"{data.roi_multiple:.1f}×"],
+        ["本月 ROI 倍数（已核实节省 / AI 投入）", f"{data.roi_multiple:.1f}×"],
     ]
     table = Table(rows, colWidths=[10 * cm, 5 * cm])
     table.setStyle(_table_style())
@@ -212,7 +214,7 @@ def _roi_section(data: MonthlyReportData, st: dict[str, ParagraphStyle]) -> list
         table,
         Spacer(1, 0.6 * cm),
         Paragraph(
-            "<i>ROI 倍数 = 本月实际节省 / 本月 AI 投入。年度报损降幅按当月节省年化估算，"
+            "<i>ROI 倍数 = 本月回执已核实节省 / 本月 AI 投入。年度报损降幅按当月节省年化估算，"
             "实际全年情况以 12 个月数据为准。</i>",
             st["body"],
         ),

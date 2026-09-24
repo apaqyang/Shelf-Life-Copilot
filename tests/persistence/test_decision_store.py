@@ -7,13 +7,15 @@ store; the API contract verified here is what the migration must preserve.
 
 from __future__ import annotations
 
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
-from src.models import ActionType, Decision, DecisionOutcome
-from src.persistence import DecisionStore
+from src.models import ActionType, Decision, DecisionOutcome, WorkOrder
+from src.persistence import DecisionRepository, DecisionStore, WorkOrderStore
 
 
 def _make_decision(
@@ -230,3 +232,120 @@ class TestNaiveDatetimeRejected:
                 start=datetime(2026, 5, 1, tzinfo=UTC),
                 end=datetime(2026, 6, 1),  # naive
             )
+
+
+def _make_work_order(decision: Decision, work_order_id: str = "WO-1") -> WorkOrder:
+    return WorkOrder(
+        work_order_id=work_order_id,
+        batch_id=decision.batch_id,
+        customer_id=decision.customer_id,
+        material_name=decision.material_name,
+        action=decision.action,
+        created_at=decision.decided_at,
+        updated_at=decision.decided_at,
+    )
+
+
+class TestApprovalTransaction:
+    def test_approval_creates_decision_and_work_order_atomically(self, tmp_path: Path) -> None:
+        path = tmp_path / "approval.db"
+        decision = _make_decision()
+        with DecisionStore(path) as store:
+            decision_id, order, created = store.record_approval(
+                decision,
+                _make_work_order(decision),
+                idempotency_key="event-1",
+            )
+            assert decision_id > 0
+            assert created is True
+            assert order.batch_id == decision.batch_id
+        with WorkOrderStore(path) as orders:
+            assert orders.get_for_batch("customerA", "A-001") == order
+
+    def test_repeated_approval_is_idempotent(self, tmp_path: Path) -> None:
+        path = tmp_path / "approval.db"
+        decision = _make_decision()
+        with DecisionStore(path) as store:
+            first = store.record_approval(
+                decision, _make_work_order(decision), idempotency_key="event-1"
+            )
+            second = store.record_approval(
+                decision,
+                _make_work_order(decision, "WO-2"),
+                idempotency_key="event-2",
+            )
+            rows = store.list_for_period(
+                "customerA",
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2027, 1, 1, tzinfo=UTC),
+            )
+        assert first[0] == second[0]
+        assert second[1].work_order_id == "WO-1"
+        assert second[2] is False
+        assert len(rows) == 1
+
+    def test_work_order_failure_rolls_back_decision(self, tmp_path: Path) -> None:
+        path = tmp_path / "approval.db"
+        first = _make_decision()
+        second = _make_decision(batch_id="A-002")
+        with DecisionStore(path) as store:
+            store.record_approval(
+                first, _make_work_order(first, "WO-shared"), idempotency_key="event-1"
+            )
+            with pytest.raises(sqlite3.IntegrityError):
+                store.record_approval(
+                    second,
+                    _make_work_order(second, "WO-shared"),
+                    idempotency_key="event-2",
+                )
+            rows = store.list_for_period(
+                "customerA",
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2027, 1, 1, tzinfo=UTC),
+            )
+        assert [row.batch_id for row in rows] == ["A-001"]
+
+    def test_rejects_invalid_approval_inputs(self, store: DecisionStore) -> None:
+        approved = _make_decision()
+        with pytest.raises(ValueError, match="approved"):
+            snoozed = _make_decision(outcome=DecisionOutcome.SNOOZED)
+            store.record_approval(snoozed, _make_work_order(snoozed), idempotency_key="event")
+        with pytest.raises(ValueError, match="empty"):
+            store.record_approval(approved, _make_work_order(approved), idempotency_key="")
+        mismatches = (
+            _make_work_order(approved).model_copy(update={"customer_id": "customerB"}),
+            _make_work_order(approved).model_copy(update={"batch_id": "A-002"}),
+            _make_work_order(approved).model_copy(update={"action": ActionType.DISCOUNT_CLEARANCE}),
+        )
+        for mismatch in mismatches:
+            with pytest.raises(ValueError, match="same approval"):
+                store.record_approval(approved, mismatch, idempotency_key="event")
+
+
+class TestConnectionPolicy:
+    def test_store_satisfies_protocol_and_context_closes(self) -> None:
+        store = DecisionStore(":memory:", busy_timeout_ms=321)
+        assert isinstance(store, DecisionRepository)
+        assert store.busy_timeout_ms == 321
+        assert store.closed is False
+        with store as entered:
+            assert entered is store
+        assert store.closed is True
+
+    def test_concurrent_writers_are_serialized_with_busy_timeout(self, tmp_path: Path) -> None:
+        path = tmp_path / "concurrent.db"
+
+        def write(index: int) -> int:
+            with DecisionStore(path) as store:
+                return store.save(_make_decision(batch_id=f"A-{index:03d}"))
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            row_ids = list(pool.map(write, range(32)))
+        assert len(set(row_ids)) == 32
+        with DecisionStore(path) as store:
+            rows = store.list_for_period(
+                "customerA",
+                datetime(2026, 1, 1, tzinfo=UTC),
+                datetime(2027, 1, 1, tzinfo=UTC),
+            )
+        assert len(rows) == 32

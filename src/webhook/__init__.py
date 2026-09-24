@@ -11,6 +11,7 @@ from src.webhook.crypto import (
     PlaintextCrypto,
     WebhookCrypto,
     get_webhook_crypto,
+    require_secure_webhook_crypto,
     reset_webhook_crypto,
     set_webhook_crypto,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "PlaintextCrypto",
     "WebhookCrypto",
     "get_webhook_crypto",
+    "require_secure_webhook_crypto",
     "reset_webhook_crypto",
     "router",
     "set_webhook_crypto",

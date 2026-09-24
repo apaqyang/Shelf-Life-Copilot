@@ -55,3 +55,9 @@ def reset_webhook_crypto() -> None:
     """Drop back to PlaintextCrypto — primarily for tests."""
     global _active_crypto
     _active_crypto = None
+
+
+def require_secure_webhook_crypto(*, is_development: bool) -> None:
+    """Fail closed when plaintext callbacks are configured outside development."""
+    if not is_development and isinstance(get_webhook_crypto(), PlaintextCrypto):
+        raise RuntimeError("production requires a secure webhook crypto adapter")
