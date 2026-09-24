@@ -38,9 +38,9 @@
 | Runtime | Python 3.11+ | |
 | Web | FastAPI | OpenAPI 自动文档 / async 友好 |
 | 任务调度 | APScheduler | 每日 07:00 扫描 |
-| LLM | `anthropic` Python SDK | Sonnet 4.6 默认 / Opus 4.7 复杂 / Haiku 4.5 改方案 |
+| LLM | provider protocol | Claude / KIMI / 本地 OpenAI-compatible / offline |
 | 企微 | 企业微信群机器人 + 应用消息 API | |
-| 存储 | SQLite（schema migration + WAL）→ PostgreSQL | 业务层依赖 Repository Protocol |
+| 存储 | SQLite（schema migration + WAL）/ PostgreSQL | 业务层依赖 Repository Protocol |
 | 测试 | pytest + pytest-asyncio | |
 | 包管理 | uv | |
 | 代码质量 | ruff + black + mypy | |
@@ -151,6 +151,18 @@ decision_makers: list[str]  # 企微 userid
 ### 4.3 `POST /api/work-orders/{work_order_id}/complete`
 使用 Bearer token、`Idempotency-Key` 和 `X-Operator-ID` 提交车间完成回执。仅 `in_progress` 工单可完成；服务端记录 UTC 完成时间，并原子回填关联 Decision 的实际数量和实际节省。
 
+### 4.4 多租户查询与管理台
+
+- `GET /api/customers`：当前主体可访问的租户。
+- `GET /api/customers/{customer_id}/batches`：租户批次分页列表。
+- `GET /api/customers/{customer_id}/work-orders`：租户工单分页列表。
+- `GET /admin`：无构建依赖的运营界面；页面不嵌入 token。
+
+### 4.5 跨批次处置计划
+
+`POST /api/optimization-plans` 在质量门禁通过后生成 `pending_approval` 计划。
+`POST /api/optimization-plans/{plan_id}/execute` 必须提供 `X-Operator-ID`，并在同一事务中记录批准、决策和工单。
+
 ### 4.4 内部：`suggest(batch, customer_config) → Suggestion`
 LLM 建议生成器核心函数。
 
@@ -232,9 +244,12 @@ LLM 建议生成器核心函数。
   - `WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET`
   - `WECOM_TEST_GROUP_ID`（Demo 推送目标群）
   - `API_TOKEN`（`/api/*` Bearer token）
+  - `API_TOKEN_CUSTOMERS`（token 可访问的客户集合）
   - `WEBHOOK_REPLAY_WINDOW_SECONDS`
   - `MAX_REQUEST_BODY_BYTES`
   - `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS`
+  - `SCAN_CONCURRENCY`
+  - `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY`
 - v0.5+：客户私有化部署支持（VPC / 厂内服务器）
 
 ---
@@ -251,12 +266,17 @@ LLM 建议生成器核心函数。
 
 ---
 
-## 9. 监控（v0.5 起接入）
+## 9. 监控
 
-- LLM 调用成功率 / 平均延迟 / token 消耗
-- 卡片送达率（企微回调 ACK）
-- 决策响应时长（推送 → 同意 时间差）
-- 采纳率（approve / total）
+- `/metrics` 提供扫描结果、LLM 成功/失败与延迟、推送失败、回调处理数和报告结果
+- 日志事件统一包含 `customer_id`、`correlation_id`、`result` 和 `duration_ms`
+- 当前指标为单进程内存聚合；多实例部署需接 Prometheus 等共享后端
+
+## 9.1 持久任务队列
+
+APScheduler 只负责将每日扫描写入 SQLite 持久队列，worker 独立认领、重试和完成任务。
+默认在 Web 进程内嵌一个 worker；`TASK_QUEUE_ENABLED=false` 可回退到直接执行。
+可用性 SLO 和可重现负载门禁见 [AVAILABILITY.md](AVAILABILITY.md)。
 
 ---
 

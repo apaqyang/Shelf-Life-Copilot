@@ -1,36 +1,28 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-toml
-      - id: check-added-large-files
-        args: [--maxkb=500]
-      - id: check-merge-conflict
-      - id: detect-private-key
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-      - id: mypy
-        files: ^src/
-        additional_dependencies:
-          - pydantic>=2.9
-          - fastapi>=0.115
-
   - repo: local
     hooks:
-      - id: no-internal-leak
-        name: 拦截对内/营销/销售材料进公开仓库
-        entry: python3 tools/check_no_internal_leak.py
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check .
         language: system
-        pass_filenames: true
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff format check
+        entry: uv run ruff format --check .
+        language: system
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: uv run mypy src
+        language: system
+        pass_filenames: false
+      - id: docs-check
+        name: documentation links and commands
+        entry: uv run python tools/check_docs.py
+        language: system
+        pass_filenames: false
+      - id: no-internal-leak
+        name: public content boundary
+        entry: uv run python tools/check_no_internal_leak.py
+        language: system
+        pass_filenames: false

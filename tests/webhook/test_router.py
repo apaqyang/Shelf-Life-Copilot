@@ -8,19 +8,23 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.main import app
-from src.models import DecisionOutcome
-from src.persistence import DecisionStore, IdempotencyStore, SuggestionStore
+from src.models import ActionType, DecisionOutcome, Suggestion
+from src.persistence import DecisionStore, IdempotencyStore, RevisionStore, SuggestionStore
 from src.runtime.config import Settings
+from src.scheduler import ScanError, ScanResult
 from src.webhook.router import (
     _validate_event_timestamp,
     get_decision_store,
     get_idempotency_store,
+    get_revision_store,
     get_runtime_settings,
+    get_scan_runner,
     get_suggestion_store,
 )
 
@@ -41,15 +45,29 @@ def idempotency_store() -> IdempotencyStore:
 
 
 @pytest.fixture
+def revision_store() -> RevisionStore:
+    return RevisionStore(":memory:")
+
+
+@pytest.fixture
+def scan_runner() -> AsyncMock:
+    return AsyncMock()
+
+
+@pytest.fixture
 def client(
     store: DecisionStore,
     suggestion_store: SuggestionStore,
     idempotency_store: IdempotencyStore,
+    revision_store: RevisionStore,
+    scan_runner: AsyncMock,
 ) -> Iterator[TestClient]:
     app.dependency_overrides[get_decision_store] = lambda: store
     app.dependency_overrides[get_suggestion_store] = lambda: suggestion_store
     app.dependency_overrides[get_idempotency_store] = lambda: idempotency_store
     app.dependency_overrides[get_runtime_settings] = lambda: Settings(_env_file=None)  # type: ignore[call-arg]
+    app.dependency_overrides[get_revision_store] = lambda: revision_store
+    app.dependency_overrides[get_scan_runner] = lambda: scan_runner
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -233,6 +251,122 @@ class TestNonClickMessages:
         assert resp.status_code == 200
         assert "ignored" in resp.json()["detail"]
 
+    def test_pending_revision_text_regenerates_once(
+        self,
+        client: TestClient,
+        suggestion_store: SuggestionStore,
+        scan_runner: AsyncMock,
+    ) -> None:
+        original = Suggestion(
+            batch_id="A-001",
+            customer_id="customerA",
+            action=ActionType.TRANSFORM,
+            savings_estimate=10,
+            rationale="original",
+            confidence=0.8,
+            is_standard=True,
+            llm_model="test",
+        )
+        revised = original.model_copy(
+            update={"user_feedback": "打折", "generated_at": datetime.now(UTC)}
+        )
+        suggestion_store.save(original)
+        scan_runner.revise_for_batch.return_value = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[],
+            suggestions=[revised],
+            cards=[],
+            errors=[],
+        )
+        click = client.post("/webhook/wecom", json=_click_payload("revise:customerA:A-001"))
+        payload = {
+            "ToUserName": "ww_corp",
+            "FromUserName": "user_zhang",
+            "CreateTime": int(datetime.now(UTC).timestamp()),
+            "MsgType": "text",
+            "Content": "打折",
+        }
+        response = client.post("/webhook/wecom", json=payload)
+        assert click.status_code == 200
+        assert response.status_code == 200
+        assert "Revised suggestion" in response.json()["detail"]
+        scan_runner.revise_for_batch.assert_awaited_once_with("customerA", "A-001", "打折")
+
+    def test_revision_failure_and_empty_feedback_are_explicit(
+        self,
+        client: TestClient,
+        suggestion_store: SuggestionStore,
+        scan_runner: AsyncMock,
+    ) -> None:
+        original = Suggestion(
+            batch_id="A-001",
+            customer_id="customerA",
+            action=ActionType.TRANSFORM,
+            savings_estimate=10,
+            rationale="original",
+            confidence=0.8,
+            is_standard=True,
+            llm_model="test",
+        )
+        suggestion_store.save(original)
+        assert (
+            client.post("/webhook/wecom", json=_click_payload("revise:customerA:A-001")).status_code
+            == 200
+        )
+        blank = {
+            "ToUserName": "ww_corp",
+            "FromUserName": "user_zhang",
+            "CreateTime": int(datetime.now(UTC).timestamp()),
+            "MsgType": "text",
+            "Content": "",
+        }
+        assert client.post("/webhook/wecom", json=blank).status_code == 400
+        scan_runner.revise_for_batch.return_value = ScanResult(
+            customer_id="customerA",
+            total_batches=1,
+            alerts=[],
+            suggestions=[],
+            cards=[],
+            errors=[ScanError(batch_id="A-001", message="provider down")],
+        )
+        failed = {**blank, "Content": "try another", "MsgId": "revision-failure"}
+        assert client.post("/webhook/wecom", json=failed).status_code == 502
+
+    def test_revision_exception_is_audited_and_re_raised(
+        self,
+        client: TestClient,
+        suggestion_store: SuggestionStore,
+        scan_runner: AsyncMock,
+    ) -> None:
+        suggestion_store.save(
+            Suggestion(
+                batch_id="A-001",
+                customer_id="customerA",
+                action=ActionType.TRANSFORM,
+                savings_estimate=10,
+                rationale="original",
+                confidence=0.8,
+                is_standard=True,
+                llm_model="test",
+            )
+        )
+        assert (
+            client.post("/webhook/wecom", json=_click_payload("revise:customerA:A-001")).status_code
+            == 200
+        )
+        scan_runner.revise_for_batch.side_effect = RuntimeError("provider crashed")
+        payload = {
+            "ToUserName": "ww_corp",
+            "FromUserName": "user_zhang",
+            "CreateTime": int(datetime.now(UTC).timestamp()),
+            "MsgType": "text",
+            "Content": "try another",
+            "MsgId": "revision-crash",
+        }
+        with pytest.raises(RuntimeError, match="provider crashed"):
+            client.post("/webhook/wecom", json=payload)
+
 
 class TestLifespanStoreDependencies:
     """Production dependencies resolve stores owned by the FastAPI lifespan."""
@@ -246,6 +380,8 @@ class TestLifespanStoreDependencies:
         test_app.state.decision_store = store
         test_app.state.suggestion_store = suggestion_store
         test_app.state.idempotency_store = IdempotencyStore(":memory:")
+        test_app.state.revision_store = RevisionStore(":memory:")
+        test_app.state.scan_runner = AsyncMock()
         test_app.state.settings = Settings(_env_file=None)  # type: ignore[call-arg]
         request = Request({"type": "http", "app": test_app})
 
@@ -253,6 +389,8 @@ class TestLifespanStoreDependencies:
         assert get_suggestion_store(request) is suggestion_store
         assert isinstance(get_idempotency_store(request), IdempotencyStore)
         assert isinstance(get_runtime_settings(request), Settings)
+        assert isinstance(get_revision_store(request), RevisionStore)
+        assert get_scan_runner(request) is test_app.state.scan_runner
 
 
 def test_validate_event_timestamp_rejects_naive_now() -> None:

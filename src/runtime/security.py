@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
 from src.runtime.config import Settings
+from src.runtime.tenant import Principal
 
 
 class SlidingWindowRateLimiter:
@@ -83,7 +84,7 @@ class RequestGuardMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def require_api_token(request: Request) -> None:
+def require_api_token(request: Request) -> Principal:
     settings: Settings = request.app.state.settings
     if settings.api_token is None:
         raise HTTPException(status_code=503, detail="API token is not configured")
@@ -92,3 +93,4 @@ def require_api_token(request: Request) -> None:
     expected = settings.api_token.get_secret_value()
     if scheme.casefold() != "bearer" or not supplied or not hmac.compare_digest(supplied, expected):
         raise HTTPException(status_code=401, detail="invalid bearer token")
+    return Principal(subject="api-token", customer_ids=settings.api_token_customer_ids)

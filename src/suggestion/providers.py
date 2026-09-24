@@ -30,6 +30,7 @@ from src.suggestion.schema import TOOL_NAME
 ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6"
 MOONSHOT_DEFAULT_MODEL = "moonshot-v1-32k"
 MOONSHOT_BASE_URL = "https://api.moonshot.cn/v1"
+LOCAL_DEFAULT_MODEL = "local-model"
 DEFAULT_MAX_TOKENS = 1024
 
 
@@ -79,14 +80,17 @@ class AnthropicProvider:
         messages: list[MessageParam] = [{"role": "user", "content": user_prompt}]
         tool_choice: ToolChoiceToolParam = {"type": "tool", "name": TOOL_NAME}
 
-        message = await self._client.messages.create(
-            model=self._model,
-            max_tokens=self._max_tokens,
-            system=system_prompt,
-            messages=messages,
-            tools=[tool],
-            tool_choice=tool_choice,
-        )
+        try:
+            message = await self._client.messages.create(
+                model=self._model,
+                max_tokens=self._max_tokens,
+                system=system_prompt,
+                messages=messages,
+                tools=[tool],
+                tool_choice=tool_choice,
+            )
+        except Exception as exc:
+            raise LLMProviderError(f"Anthropic request failed: {type(exc).__name__}") from exc
         return self._extract(message)
 
     @staticmethod
@@ -138,16 +142,23 @@ class MoonshotProvider:
         }
         # OpenAI SDK 的 model 字段被严格 Literal 到 GPT-* 名称——Moonshot 用同协议
         # 但是不同模型名，所以这里把 kwargs 走 cast(Any) 绕过类型限制。
-        completion = await self._client.chat.completions.create(
-            model=cast(Any, self._model),
-            max_tokens=self._max_tokens,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            tools=[cast(Any, function_spec)],
-            tool_choice=cast(Any, {"type": "function", "function": {"name": tool_schema["name"]}}),
-        )
+        try:
+            completion = await self._client.chat.completions.create(
+                model=cast(Any, self._model),
+                max_tokens=self._max_tokens,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                tools=[cast(Any, function_spec)],
+                tool_choice=cast(
+                    Any, {"type": "function", "function": {"name": tool_schema["name"]}}
+                ),
+            )
+        except Exception as exc:
+            raise LLMProviderError(
+                f"OpenAI-compatible request failed: {type(exc).__name__}"
+            ) from exc
         return self._extract(completion)
 
     @staticmethod
@@ -181,6 +192,22 @@ def build_anthropic_provider(
 def build_moonshot_provider(api_key: str, model: str = MOONSHOT_DEFAULT_MODEL) -> MoonshotProvider:
     return MoonshotProvider(
         client=AsyncOpenAI(api_key=api_key, base_url=MOONSHOT_BASE_URL),
+        model=model,
+    )
+
+
+class LocalLLMProvider(MoonshotProvider):
+    """OpenAI-compatible provider for an operator-controlled local endpoint."""
+
+
+def build_local_provider(
+    base_url: str,
+    *,
+    model: str = LOCAL_DEFAULT_MODEL,
+    api_key: str = "local",
+) -> LocalLLMProvider:
+    return LocalLLMProvider(
+        client=AsyncOpenAI(api_key=api_key, base_url=base_url),
         model=model,
     )
 

@@ -18,8 +18,10 @@ from openai import AsyncOpenAI
 from src.suggestion.providers import (
     AnthropicProvider,
     LLMProviderError,
+    LocalLLMProvider,
     MoonshotProvider,
     build_anthropic_provider,
+    build_local_provider,
     build_moonshot_provider,
 )
 from src.suggestion.schema import TOOL_NAME
@@ -115,6 +117,13 @@ class TestAnthropicProvider:
     def test_factory(self) -> None:
         provider = build_anthropic_provider("sk-test", model="claude-opus-4-7")
         assert provider.model_name == "claude-opus-4-7"
+
+    async def test_normalizes_transport_failure(self) -> None:
+        client = MagicMock(spec=AsyncAnthropic)
+        client.messages = MagicMock()
+        client.messages.create = AsyncMock(side_effect=TimeoutError("secret endpoint"))
+        with pytest.raises(LLMProviderError, match="TimeoutError"):
+            await AnthropicProvider(client).call_with_tool("sys", "user", _TOOL_SCHEMA)
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +236,16 @@ class TestMoonshotProvider:
     def test_factory(self) -> None:
         provider = build_moonshot_provider("sk-test", model="kimi-latest")
         assert provider.model_name == "kimi-latest"
+
+    async def test_normalizes_transport_failure(self) -> None:
+        client = MagicMock(spec=AsyncOpenAI)
+        client.chat = MagicMock()
+        client.chat.completions = MagicMock()
+        client.chat.completions.create = AsyncMock(side_effect=TimeoutError("secret endpoint"))
+        with pytest.raises(LLMProviderError, match="TimeoutError"):
+            await MoonshotProvider(client).call_with_tool("sys", "user", _TOOL_SCHEMA)
+
+    def test_local_factory_uses_same_contract(self) -> None:
+        provider = build_local_provider("http://127.0.0.1:11434/v1", model="qwen")
+        assert isinstance(provider, LocalLLMProvider)
+        assert provider.model_name == "qwen"

@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from src.models import ActionType, Decision, DecisionOutcome, WorkOrder
-from src.persistence import DecisionRepository, SuggestionRepository
+from src.persistence import DecisionRepository, RevisionStore, SuggestionRepository
 from src.repository import BatchRepository, get_repository
 from src.webhook.schemas import WecomEvent
 
@@ -37,10 +37,7 @@ _ACTION_KEY_TO_OUTCOME: dict[str, DecisionOutcome] = {
     "snooze": DecisionOutcome.SNOOZED,
 }
 
-_REVISE_PROMPT = (
-    "💬 改方案已收到。请直接在群里回复：『批号 改方案内容』"
-    "（v0.1 暂不自动重生成，工程师会人工跟进 → 后续走 --revise-batch / --feedback）"
-)
+_REVISE_PROMPT = "💬 改方案已收到。请直接回复改方案内容；系统只接受一轮反馈并保留审计记录。"
 
 
 def _parse_event_key(event_key: str) -> tuple[str, str, str]:
@@ -57,6 +54,7 @@ def handle_click(
     store: DecisionRepository,
     suggestion_store: SuggestionRepository | None = None,
     repository: BatchRepository | None = None,
+    revision_store: RevisionStore | None = None,
 ) -> str:
     """Route a click event to the right side effect, return a short status line.
 
@@ -71,6 +69,20 @@ def handle_click(
     action_key, customer_id, batch_id = _parse_event_key(event.event_key)
 
     if action_key == "revise":
+        if revision_store is not None:
+            if suggestion_store is None:
+                return _REVISE_PROMPT
+            latest = suggestion_store.latest_for_batch(customer_id, batch_id)
+            if latest is None:
+                return _REVISE_PROMPT
+            if latest.user_feedback is not None:
+                raise UnknownActionError("only one revision round is allowed")
+            revision_store.open(
+                operator_id=event.from_user_name,
+                customer_id=customer_id,
+                batch_id=batch_id,
+                original_generated_at=latest.generated_at,
+            )
         return _REVISE_PROMPT
 
     outcome = _ACTION_KEY_TO_OUTCOME.get(action_key)

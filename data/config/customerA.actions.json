@@ -20,5 +20,6 @@
     "red": 7
   },
   "decision_makers": ["wecom_userid_zhangzong"],
-  "avg_savings_per_batch": 8333
+  "avg_savings_per_batch": 8333,
+  "annual_baseline_loss": 1500000
 }

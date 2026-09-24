@@ -29,17 +29,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-groups
 
-      - name: ruff check
-        run: uv run ruff check .
-
-      - name: ruff format --check
-        run: uv run ruff format --check .
-
-      - name: mypy
-        run: uv run mypy src
-
-      - name: 内容边界检查（拦对内/营销材料）
-        run: uv run python tools/check_no_internal_leak.py
+      - name: Run repository checks
+        run: make lint docs-check no-internal-leak
 
   test:
     name: Test (pytest + coverage)
@@ -65,7 +56,7 @@ jobs:
         run: uv sync --all-groups --python ${{ matrix.python-version }}
 
       - name: Run pytest
-        run: uv run --python ${{ matrix.python-version }} pytest
+        run: make test
 
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'

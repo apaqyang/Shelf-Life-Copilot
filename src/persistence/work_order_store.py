@@ -50,6 +50,35 @@ class WorkOrderStore:
         )
         return None if row is None else _from_row(row)
 
+    def get(self, work_order_id: str) -> WorkOrder | None:
+        row = self._db.fetchone(
+            """
+            SELECT work_order_id, batch_id, customer_id, material_name,
+                   action, status, created_at, updated_at, actual_qty,
+                   actual_savings, completed_by, completed_at, completion_source
+            FROM work_orders WHERE work_order_id = ?
+            """,
+            (work_order_id,),
+        )
+        return None if row is None else _from_row(row)
+
+    def list_for_customer(
+        self, customer_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[WorkOrder]:
+        rows = self._db.fetchall(
+            """
+            SELECT work_order_id, batch_id, customer_id, material_name,
+                   action, status, created_at, updated_at, actual_qty,
+                   actual_savings, completed_by, completed_at, completion_source
+            FROM work_orders
+            WHERE customer_id = ?
+            ORDER BY created_at DESC, work_order_id ASC
+            LIMIT ? OFFSET ?
+            """,
+            (customer_id, limit, offset),
+        )
+        return [_from_row(row) for row in rows]
+
     def transition(
         self,
         work_order_id: str,

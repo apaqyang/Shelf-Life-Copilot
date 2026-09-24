@@ -60,6 +60,20 @@ class TestDailySchedulerDispatch:
         runner.run_for_customer.assert_awaited_once_with("customerA")
 
     @pytest.mark.asyncio
+    async def test_queue_mode_dispatches_without_running_inline(self, runner: AsyncMock) -> None:
+        queue = MagicMock()
+        scheduler = DailyScheduler(
+            runner=runner,
+            customer_ids=["customerA"],
+            task_queue=queue,
+        )
+        await scheduler._run_one_customer("customerA")  # noqa: SLF001
+        runner.run_for_customer.assert_not_awaited()
+        queue.enqueue.assert_called_once()
+        assert queue.enqueue.call_args.args == ("scan", "customerA")
+        assert queue.enqueue.call_args.kwargs["dedupe_key"].startswith("scan:customerA:")
+
+    @pytest.mark.asyncio
     async def test_on_result_callback_invoked(self, runner: AsyncMock) -> None:
         on_result = AsyncMock()
         scheduler = DailyScheduler(

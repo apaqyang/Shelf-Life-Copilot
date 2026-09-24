@@ -7,6 +7,10 @@ tool_use vs OpenAI function calling). One engine + many providers.
 
 from __future__ import annotations
 
+import logging
+import time
+from uuid import uuid4
+
 from pydantic import BaseModel, Field
 
 from src.models import (
@@ -16,6 +20,7 @@ from src.models import (
     CustomerConfig,
     Suggestion,
 )
+from src.observability import log_event, metrics
 from src.suggestion.prompt import SYSTEM_PROMPT, build_user_prompt
 from src.suggestion.providers import LLMProvider, LLMProviderError
 from src.suggestion.schema import build_suggestion_tool
@@ -48,6 +53,8 @@ class SuggestionEngine:
         feedback: str | None = None,
     ) -> Suggestion:
         """Call the LLM and return a validated Suggestion. Raises on malformed response."""
+        started = time.perf_counter()
+        correlation_id = str(uuid4())
         user_prompt = build_user_prompt(
             batch=batch,
             alert=alert,
@@ -63,11 +70,40 @@ class SuggestionEngine:
                 tool_schema=tool,
             )
         except LLMProviderError as exc:
+            duration_ms = (time.perf_counter() - started) * 1000
+            metrics.increment("llm_failure_total")
+            metrics.observe("llm_duration_ms", duration_ms)
+            log_event(
+                logging.getLogger(__name__),
+                logging.ERROR,
+                "suggestion.failed",
+                customer_id=customer.customer_id,
+                correlation_id=correlation_id,
+                result="failure",
+                duration_ms=duration_ms,
+                batch_id=batch.batch_id,
+            )
             raise SuggestionEngineError(str(exc)) from exc
 
-        payload = _SuggestionPayload.model_validate(raw)
+        try:
+            payload = _SuggestionPayload.model_validate(raw)
+        except Exception:
+            duration_ms = (time.perf_counter() - started) * 1000
+            metrics.increment("llm_failure_total")
+            metrics.observe("llm_duration_ms", duration_ms)
+            log_event(
+                logging.getLogger(__name__),
+                logging.ERROR,
+                "suggestion.failed",
+                customer_id=customer.customer_id,
+                correlation_id=correlation_id,
+                result="invalid_response",
+                duration_ms=duration_ms,
+                batch_id=batch.batch_id,
+            )
+            raise
 
-        return Suggestion(
+        suggestion = Suggestion(
             batch_id=batch.batch_id,
             customer_id=customer.customer_id,
             action=payload.action,
@@ -78,3 +114,17 @@ class SuggestionEngine:
             llm_model=self._provider.model_name,
             user_feedback=feedback,
         )
+        duration_ms = (time.perf_counter() - started) * 1000
+        metrics.increment("llm_success_total")
+        metrics.observe("llm_duration_ms", duration_ms)
+        log_event(
+            logging.getLogger(__name__),
+            logging.INFO,
+            "suggestion.completed",
+            customer_id=customer.customer_id,
+            correlation_id=correlation_id,
+            result="success",
+            duration_ms=duration_ms,
+            batch_id=batch.batch_id,
+        )
+        return suggestion

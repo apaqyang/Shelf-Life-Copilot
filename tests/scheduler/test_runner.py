@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -158,6 +159,10 @@ class TestScanRunnerErrorIsolation:
 
 
 class TestScanRunnerOptionalEngine:
+    def test_concurrency_must_be_positive(self) -> None:
+        with pytest.raises(ValueError, match="max_concurrency"):
+            ScanRunner(max_concurrency=0)
+
     @pytest.mark.asyncio
     async def test_explicit_data_root_keeps_json_repository_compatibility(self) -> None:
         runner = ScanRunner(engine=None, data_root=Path("data"))
@@ -176,6 +181,30 @@ class TestScanRunnerOptionalEngine:
         runner = ScanRunner(engine=None)
         with pytest.raises(ValueError, match="engine is required"):
             await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+
+    @pytest.mark.asyncio
+    async def test_bounded_concurrency_preserves_batch_order(self) -> None:
+        engine = AsyncMock(spec=SuggestionEngine)
+        active = 0
+        peak = 0
+
+        async def _suggest(
+            batch: Batch, alert: Alert, customer: CustomerConfig, feedback: str | None = None
+        ) -> Suggestion:
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            await asyncio.sleep(0.001 if batch.batch_id.endswith("1") else 0)
+            active -= 1
+            return _make_suggestion(batch.batch_id, customer.customer_id)
+
+        engine.suggest = AsyncMock(side_effect=_suggest)
+        runner = ScanRunner(engine=engine, max_concurrency=2)
+        result = await runner.run_for_customer("customerA", today=date(2026, 5, 26))
+        assert 1 < peak <= 2
+        assert [item.batch_id for item in result.suggestions] == [
+            item.batch_id for item in result.alerts
+        ]
 
 
 class TestScanResultModel:

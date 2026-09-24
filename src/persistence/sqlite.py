@@ -12,6 +12,7 @@ from typing import cast
 from src.persistence.migrations import run_migrations
 
 DEFAULT_BUSY_TIMEOUT_MS = 5_000
+_INITIALIZATION_LOCK = RLock()
 
 
 class SQLiteDatabase:
@@ -35,8 +36,10 @@ class SQLiteDatabase:
         )
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
-        self._connection.execute("PRAGMA journal_mode = WAL")
-        with self._lock:
+        # WAL negotiation and first-run DDL both take database-wide locks.
+        # Serialize them inside one process; busy_timeout covers other processes.
+        with _INITIALIZATION_LOCK:
+            self._connection.execute("PRAGMA journal_mode = WAL")
             self.schema_version = run_migrations(self._connection)
 
     @property

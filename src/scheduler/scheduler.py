@@ -3,16 +3,33 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime
+from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from src.observability import log_event, metrics
 from src.scheduler.runner import ScanResult, ScanRunner
 
 logger = logging.getLogger(__name__)
 
 ScanResultCallback = Callable[[ScanResult], Awaitable[None]]
+
+
+class TaskPublisher(Protocol):
+    def enqueue(
+        self,
+        task_kind: str,
+        customer_id: str,
+        *,
+        payload: dict[str, object] | None = None,
+        dedupe_key: str,
+        now: datetime | None = None,
+    ) -> tuple[str, bool]: ...  # pragma: no cover
 
 
 class DailyScheduler:
@@ -30,6 +47,7 @@ class DailyScheduler:
         minute: int = 0,
         timezone: str = "Asia/Shanghai",
         on_result: ScanResultCallback | None = None,
+        task_queue: TaskPublisher | None = None,
     ) -> None:
         if not customer_ids:
             raise ValueError("customer_ids must not be empty")
@@ -44,6 +62,7 @@ class DailyScheduler:
         self._minute = minute
         self._timezone = timezone
         self._on_result = on_result
+        self._task_queue = task_queue
         self._scheduler = AsyncIOScheduler()
         self._register_jobs()
 
@@ -62,18 +81,43 @@ class DailyScheduler:
             )
 
     async def _run_one_customer(self, customer_id: str) -> None:
+        if self._task_queue is not None:
+            business_date = datetime.now(ZoneInfo(self._timezone)).date().isoformat()
+            self._task_queue.enqueue(
+                "scan",
+                customer_id,
+                dedupe_key=f"scan:{customer_id}:{business_date}",
+            )
+            return
+        started = time.perf_counter()
         try:
             result = await self._runner.run_for_customer(customer_id)
         except Exception:  # noqa: BLE001
-            logger.exception("Scan job failed for customer %s", customer_id)
+            duration_ms = (time.perf_counter() - started) * 1000
+            metrics.increment("scan_failure_total")
+            log_event(
+                logger,
+                logging.ERROR,
+                "scan.failed",
+                customer_id=customer_id,
+                correlation_id="scheduler",
+                result="failure",
+                duration_ms=duration_ms,
+            )
             return
 
-        logger.info(
-            "Scan %s: %d alerts, %d suggestions, %d errors",
-            customer_id,
-            len(result.alerts),
-            len(result.suggestions),
-            len(result.errors),
+        metrics.increment("scan_success_total" if not result.errors else "scan_partial_total")
+        log_event(
+            logger,
+            logging.INFO,
+            "scan.dispatched",
+            customer_id=customer_id,
+            correlation_id=result.correlation_id,
+            result="partial" if result.errors else "success",
+            duration_ms=result.duration_ms,
+            alert_count=len(result.alerts),
+            suggestion_count=len(result.suggestions),
+            error_count=len(result.errors),
         )
         if self._on_result is not None:
             await self._on_result(result)

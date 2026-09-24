@@ -1,0 +1,6 @@
+[
+  {"case_id":"standard-red","category":"standard","days_left":3,"stock_qty":100,"enabled_actions":["discount_clearance"],"expected_standard":true},
+  {"case_id":"out-of-scope","category":"out_of_scope","days_left":8,"stock_qty":80,"enabled_actions":["report_loss"],"feedback":"请转员工食堂","expected_standard":false},
+  {"case_id":"missing-context","category":"missing_data","days_left":12,"stock_qty":0,"enabled_actions":["transfer_warehouse"],"expected_standard":true},
+  {"case_id":"expired","category":"extreme_days","days_left":-365,"stock_qty":20,"enabled_actions":["report_loss"],"expected_standard":true}
+]

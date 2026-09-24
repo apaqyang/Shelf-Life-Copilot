@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from datetime import UTC, date, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.alerts import scan_batch
-from src.models import Alert, Card, Suggestion
+from src.models import Alert, Batch, Card, Suggestion
+from src.observability import log_event, metrics
 from src.persistence import SuggestionRepository
 from src.repository import BatchRepository, JsonRepository, get_repository
 from src.suggestion import SuggestionEngine
@@ -44,6 +48,8 @@ class ScanResult(BaseModel):
     cards: list[Card] = Field(default_factory=list)
     errors: list[ScanError]
     batch_ids: list[str] = Field(default_factory=list)
+    correlation_id: str = ""
+    duration_ms: float = 0.0
 
 
 class ScanRunner:
@@ -55,9 +61,13 @@ class ScanRunner:
         data_root: Path | None = None,
         suggestion_store: SuggestionRepository | None = None,
         repository: BatchRepository | None = None,
+        max_concurrency: int = 4,
     ) -> None:
+        if max_concurrency <= 0:
+            raise ValueError("max_concurrency must be positive")
         self._engine = engine
         self._suggestion_store = suggestion_store
+        self._max_concurrency = max_concurrency
         if repository is not None:
             self._repository = repository
         elif data_root is not None:
@@ -70,6 +80,7 @@ class ScanRunner:
         customer_id: str,
         today: date | None = None,
         skip_llm: bool = False,
+        correlation_id: str | None = None,
     ) -> ScanResult:
         """Load batches + config, classify severity, optionally call the LLM per alert.
 
@@ -81,6 +92,8 @@ class ScanRunner:
         Raises:
             ValueError: when skip_llm=False but no engine was injected.
         """
+        started = time.perf_counter()
+        trace_id = correlation_id or str(uuid4())
         if not skip_llm and self._engine is None:
             raise ValueError("engine is required when skip_llm=False")
 
@@ -92,26 +105,56 @@ class ScanRunner:
         cards: list[Card] = []
         errors: list[ScanError] = []
 
+        alert_batches: list[tuple[Batch, Alert]] = []
         for batch in batches:
             alert = scan_batch(batch, config.alert_thresholds, today=today)
             if alert is None:
                 continue
             alerts.append(alert)
+            alert_batches.append((batch, alert))
 
-            if skip_llm or self._engine is None:
-                continue
-
-            # Per-batch isolation: one bad LLM call must not abort the whole scan.
+        async def suggest_one(
+            batch: Batch, alert: Alert
+        ) -> tuple[Suggestion | None, Card | None, ScanError | None]:
+            assert self._engine is not None  # noqa: S101 - guarded before scheduling
             try:
-                suggestion = await self._engine.suggest(batch, alert, config)
+                async with semaphore:
+                    suggestion = await self._engine.suggest(batch, alert, config)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("LLM suggestion failed for batch %s", batch.batch_id)
-                errors.append(ScanError(batch_id=batch.batch_id, message=str(exc)))
-                continue
-            suggestions.append(suggestion)
-            cards.append(render_card_for_alert(batch, alert, suggestion, config))
-            if self._suggestion_store is not None:
-                self._suggestion_store.save(suggestion)
+                return None, None, ScanError(batch_id=batch.batch_id, message=str(exc))
+            return suggestion, render_card_for_alert(batch, alert, suggestion, config), None
+
+        if not skip_llm and self._engine is not None:
+            semaphore = asyncio.Semaphore(self._max_concurrency)
+            outcomes = await asyncio.gather(
+                *(suggest_one(batch, alert) for batch, alert in alert_batches)
+            )
+            for suggestion, card, error in outcomes:
+                if error is not None:
+                    errors.append(error)
+                    continue
+                assert suggestion is not None and card is not None  # noqa: S101
+                suggestions.append(suggestion)
+                cards.append(card)
+                if self._suggestion_store is not None:
+                    self._suggestion_store.save(suggestion)
+
+        duration_ms = (time.perf_counter() - started) * 1000
+        metrics.increment("scan_total")
+        metrics.increment("scan_failed_batches_total", len(errors))
+        metrics.observe("scan_duration_ms", duration_ms)
+        log_event(
+            logger,
+            logging.INFO,
+            "scan.completed",
+            customer_id=customer_id,
+            correlation_id=trace_id,
+            result="partial" if errors else "success",
+            duration_ms=duration_ms,
+            alert_count=len(alerts),
+            suggestion_count=len(suggestions),
+        )
 
         return ScanResult(
             customer_id=customer_id,
@@ -121,6 +164,8 @@ class ScanRunner:
             cards=cards,
             errors=errors,
             batch_ids=[batch.batch_id for batch in batches],
+            correlation_id=trace_id,
+            duration_ms=duration_ms,
         )
 
     async def revise_for_batch(

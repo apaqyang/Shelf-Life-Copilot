@@ -23,6 +23,7 @@ class CustomerConfig(BaseModel):
     alert_thresholds: AlertThresholds
     decision_makers: list[str]
     avg_savings_per_batch: float = Field(default=5000.0, gt=0.0)
+    annual_baseline_loss: float = Field(default=1.0, gt=0.0)
 
     @field_validator("alert_thresholds", mode="before")
     @classmethod

@@ -41,4 +41,8 @@ def load_batches(
     path = base / "batches" / f"{customer_id}.json"
     with path.open(encoding="utf-8") as f:
         payload = json.load(f)
-    return [Batch.model_validate(item) for item in payload]
+    batches = [Batch.model_validate(item) for item in payload]
+    batch_ids = [batch.batch_id for batch in batches]
+    if len(batch_ids) != len(set(batch_ids)):
+        raise ValueError(f"duplicate batch_id in customer {customer_id!r}")
+    return batches

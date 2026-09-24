@@ -27,9 +27,14 @@ def test_new_database_reaches_latest_version_and_reopen_is_idempotent(tmp_path: 
     with DecisionStore(path) as reopened:
         assert reopened.schema_version == LATEST_SCHEMA_VERSION
     with sqlite3.connect(path) as connection:
-        assert {"schema_migrations", "decisions", "suggestions", "work_orders"} <= _tables(
-            connection
-        )
+        assert {
+            "schema_migrations",
+            "decisions",
+            "suggestions",
+            "work_orders",
+            "optimization_plans",
+            "task_queue",
+        } <= _tables(connection)
 
 
 def test_unversioned_legacy_database_is_upgraded_without_data_loss(tmp_path: Path) -> None:

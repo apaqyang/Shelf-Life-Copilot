@@ -20,7 +20,7 @@ from src.models.action import ActionType
 from src.models.decision import DecisionOutcome
 from src.persistence import DecisionStore
 from src.scheduler import ScanError, ScanResult
-from src.suggestion import AnthropicProvider, MoonshotProvider
+from src.suggestion import AnthropicProvider, LocalLLMProvider, MoonshotProvider
 from src.wecom import DryRunWecomClient, WebhookWecomClient
 
 
@@ -868,6 +868,14 @@ class TestBuildProvider:
         monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
         provider = _build_provider("offline", None)
         assert isinstance(provider, OfflineLLMProvider)
+
+    def test_local_provider_uses_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOCAL_LLM_BASE_URL", "http://127.0.0.1:9999/v1")
+        monkeypatch.setenv("LOCAL_LLM_MODEL", "local-qwen")
+        monkeypatch.setenv("LOCAL_LLM_API_KEY", "dev")
+        provider = _build_provider("local", None)
+        assert isinstance(provider, LocalLLMProvider)
+        assert provider.model_name == "local-qwen"
 
     def test_missing_key_error_message_mentions_offline(
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch

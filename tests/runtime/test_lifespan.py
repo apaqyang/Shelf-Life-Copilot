@@ -96,14 +96,20 @@ class TestLifespanWithoutLlmKey:
             suggestion_store = app.state.suggestion_store
             work_order_store = app.state.work_order_store
             idempotency_store = app.state.idempotency_store
+            optimization_plan_store = app.state.optimization_plan_store
+            task_queue = app.state.task_queue
             assert decision_store.closed is False
             assert suggestion_store.closed is False
             assert work_order_store.closed is False
             assert idempotency_store.closed is False
+            assert optimization_plan_store.closed is False
+            assert task_queue.closed is False
         assert decision_store.closed is True
         assert suggestion_store.closed is True
         assert work_order_store.closed is True
         assert idempotency_store.closed is True
+        assert optimization_plan_store.closed is True
+        assert task_queue.closed is True
 
     def test_production_refuses_plaintext_webhook_crypto(self, base_settings: Settings) -> None:
         from src.webhook import reset_webhook_crypto
@@ -167,6 +173,20 @@ class TestLifespanWithLlmKey:
         app = FastAPI(lifespan=build_lifespan(settings))
         for _ in _make_client(app):
             assert app.state.daily_scheduler is not None  # NOT None, even sans key
+
+    def test_direct_scheduler_rollback_switch(self, base_settings: Settings) -> None:
+        settings = base_settings.model_copy(
+            update={"llm_provider": "offline", "task_queue_enabled": False}
+        )
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert app.state.daily_scheduler._task_queue is None  # noqa: SLF001
+
+    def test_local_provider_starts_daily_scheduler(self, base_settings: Settings) -> None:
+        settings = base_settings.model_copy(update={"llm_provider": "local"})
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert app.state.daily_scheduler is not None
 
     def test_webhook_url_uses_real_client(self, base_settings: Settings) -> None:
         """When WECOM_WEBHOOK_URL is set, the WeCom client must be WebhookWecomClient."""

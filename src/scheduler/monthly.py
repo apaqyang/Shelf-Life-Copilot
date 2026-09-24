@@ -9,6 +9,7 @@ generate and deliver the previous calendar month's report.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from src.observability import log_event, metrics
 from src.reports import ReportRunResult, run_monthly_reports
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ class MonthlyReportScheduler:
         failure doesn't bring down APScheduler's reactor — operations folks
         check logs and re-run via this same method.
         """
+        started = time.perf_counter()
         try:
             results = run_monthly_reports(
                 today=datetime.now(self._timezone).date(),
@@ -82,13 +85,33 @@ class MonthlyReportScheduler:
                 baselines=self._baselines,
             )
         except Exception:  # noqa: BLE001
-            logger.exception("Monthly report orchestration failed")
+            duration_ms = (time.perf_counter() - started) * 1000
+            metrics.increment("report_failure_total")
+            metrics.observe("report_duration_ms", duration_ms)
+            log_event(
+                logger,
+                logging.ERROR,
+                "report.failed",
+                customer_id="all",
+                correlation_id="monthly",
+                result="failure",
+                duration_ms=duration_ms,
+            )
             return
 
-        logger.info(
-            "Monthly run produced %d results (skipped=%d)",
-            len(results),
-            sum(1 for r in results if r.is_skipped),
+        duration_ms = (time.perf_counter() - started) * 1000
+        metrics.increment("report_success_total")
+        metrics.observe("report_duration_ms", duration_ms)
+        log_event(
+            logger,
+            logging.INFO,
+            "report.completed",
+            customer_id="all",
+            correlation_id="monthly",
+            result="success",
+            duration_ms=duration_ms,
+            report_count=len(results),
+            skipped_count=sum(1 for r in results if r.is_skipped),
         )
 
         if self._on_result is None:
@@ -98,7 +121,15 @@ class MonthlyReportScheduler:
             try:
                 await self._on_result(result)
             except Exception:  # noqa: BLE001
-                logger.exception("Monthly on_result callback failed for %s", result.customer_id)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "report.callback_failed",
+                    customer_id=result.customer_id,
+                    correlation_id="monthly",
+                    result="failure",
+                    duration_ms=0,
+                )
 
     def start(self) -> None:
         """Begin firing the monthly job (requires a running asyncio event loop)."""

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from src.models import ActionType, Batch, DecisionOutcome, Suggestion
-from src.persistence import DecisionStore, SuggestionStore, WorkOrderStore
+from src.persistence import DecisionStore, RevisionStore, SuggestionStore, WorkOrderStore
 from src.webhook.handlers import (
     UnknownActionError,
     UnknownBatchError,
@@ -277,3 +277,23 @@ class TestHandleClickWithSuggestionStore:
             end=datetime(2027, 1, 1, tzinfo=UTC),
         )
         assert rows == []
+
+    def test_revision_requires_only_one_round(self) -> None:
+        decisions = DecisionStore(":memory:")
+        revisions = RevisionStore(":memory:")
+        assert "改方案" in handle_click(
+            _click("revise:customerA:A-001"),
+            decisions,
+            suggestion_store=None,
+            revision_store=revisions,
+        )
+        suggestions = SuggestionStore(":memory:")
+        revised = self._make_persisted_suggestion().model_copy(update={"user_feedback": "done"})
+        suggestions.save(revised)
+        with pytest.raises(UnknownActionError, match="one revision"):
+            handle_click(
+                _click("revise:customerA:A-001"),
+                decisions,
+                suggestion_store=suggestions,
+                revision_store=revisions,
+            )

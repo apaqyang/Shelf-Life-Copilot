@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from src.admin import router as admin_router
 from src.api import router as api_router
+from src.observability import metrics
 from src.runtime import get_settings
 from src.runtime.lifespan import build_lifespan
 from src.runtime.security import RequestGuardMiddleware
@@ -34,9 +36,16 @@ app.add_middleware(
 )
 app.include_router(wecom_webhook_router)
 app.include_router(api_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Liveness probe used by container orchestrators and CI."""
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def runtime_metrics() -> object:
+    """Return the minimal in-process operational metric set."""
+    return metrics.snapshot()

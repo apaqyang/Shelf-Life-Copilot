@@ -52,10 +52,12 @@ class TestDefaults:
         assert s.anthropic_api_key is None
         assert s.moonshot_api_key is None
         assert s.llm_provider == "anthropic"
-        assert s.customer_baselines == {
-            "customerA": 1_500_000.0,
-            "customerB": 860_000.0,
-        }
+        assert s.customer_baselines == {}
+        assert s.task_queue_enabled is True
+        assert s.task_worker_max_attempts == 3
+        assert s.task_worker_poll_seconds == 0.2
+        assert s.task_visibility_timeout_seconds == 300
+        assert s.api_token_customer_ids == frozenset({"customerA", "customerB"})
 
 
 class TestEnvOverrides:
@@ -165,6 +167,11 @@ class TestValidation:
     def test_non_positive_security_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("RATE_LIMIT_REQUESTS", "0")
         with pytest.raises(ValueError, match="positive"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_non_positive_worker_poll_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TASK_WORKER_POLL_SECONDS", "0")
+        with pytest.raises(ValueError, match="poll interval"):
             Settings(_env_file=None)  # type: ignore[call-arg]
 
 

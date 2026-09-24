@@ -40,6 +40,7 @@ from src.suggestion import (
     LLMProvider,
     SuggestionEngine,
     build_anthropic_provider,
+    build_local_provider,
     build_moonshot_provider,
     build_offline_provider,
 )
@@ -47,7 +48,7 @@ from src.wecom import DryRunWecomClient, WebhookWecomClient, WecomClient
 
 _DEFAULT_DB_PATH = "data/decisions.db"
 
-_PROVIDER_CHOICES = ("anthropic", "moonshot", "offline")
+_PROVIDER_CHOICES = ("anthropic", "moonshot", "local", "offline")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -172,6 +173,12 @@ def _build_provider(provider_name: str, model: str | None) -> LLMProvider | None
         # Zero-config demo path — no API key, no signup. Same Protocol as the
         # real providers so SuggestionEngine doesn't branch on this.
         return build_offline_provider()
+    if provider_name == "local":
+        return build_local_provider(
+            os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
+            model=model or os.environ.get("LOCAL_LLM_MODEL", "local-model"),
+            api_key=os.environ.get("LOCAL_LLM_API_KEY", "local"),
+        )
     if provider_name == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:

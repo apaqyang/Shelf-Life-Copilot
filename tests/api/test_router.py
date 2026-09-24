@@ -74,6 +74,154 @@ def test_manual_scan_requires_auth_and_idempotency_key(settings: Settings) -> No
         )
 
 
+def test_tenant_query_api_lists_only_authorized_data(settings: Settings) -> None:
+    with TestClient(_app(settings)) as client:
+        customers = client.get("/api/customers", headers={"Authorization": "Bearer secret"})
+        batches = client.get(
+            "/api/customers/customerA/batches?limit=2",
+            headers={"Authorization": "Bearer secret"},
+        )
+        denied = client.get(
+            "/api/customers/customerB/batches",
+            headers={"Authorization": "Bearer secret"},
+        )
+        orders = client.get(
+            "/api/customers/customerA/work-orders",
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert customers.json()["items"] == [{"customer_id": "customerA", "industry": "frozen_seafood"}]
+    assert len(batches.json()["items"]) == 2
+    assert batches.json()["page"] == {"next_cursor": 2}
+    assert denied.status_code == 403
+    assert orders.json() == {"items": [], "page": {"next_cursor": None}}
+
+
+def test_query_api_auth_validation_and_missing_source(settings: Settings) -> None:
+    expanded = settings.model_copy(update={"api_token_customers": "customerA,missing"})
+    with TestClient(_app(expanded)) as client:
+        assert client.get("/api/customers").status_code == 401
+        customers = client.get("/api/customers", headers={"Authorization": "Bearer secret"})
+        missing = client.get(
+            "/api/customers/missing/batches", headers={"Authorization": "Bearer secret"}
+        )
+    assert len(customers.json()["items"]) == 1
+    assert missing.status_code == 404
+
+
+def test_optimization_plan_requires_gate_and_human_approval(settings: Settings) -> None:
+    app = _app(settings)
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/optimization-plans",
+            json={
+                "customer_id": "customerA",
+                "today": "2026-05-26",
+                "capacity_by_action": {"transform": 1000},
+            },
+            headers=headers,
+        )
+        assert created.status_code == 200
+        plan = created.json()["plan"]
+        assert created.json()["gate"]["passed"] is True
+        assert plan["status"] == "pending_approval"
+        fetched = client.get(f"/api/optimization-plans/{plan['plan_id']}", headers=headers)
+        missing_operator = client.post(
+            f"/api/optimization-plans/{plan['plan_id']}/execute", headers=headers
+        )
+        executed = client.post(
+            f"/api/optimization-plans/{plan['plan_id']}/execute",
+            headers={**headers, "X-Operator-ID": "director-1"},
+        )
+        duplicate = client.post(
+            f"/api/optimization-plans/{plan['plan_id']}/execute",
+            headers={**headers, "X-Operator-ID": "director-1"},
+        )
+        orders = client.get("/api/customers/customerA/work-orders", headers=headers).json()["items"]
+    assert fetched.json()["status"] == "pending_approval"
+    assert missing_operator.status_code == 422
+    assert executed.json()["status"] == "executed"
+    assert executed.json()["approved_by"] == "director-1"
+    assert duplicate.status_code == 409
+    assert orders
+
+
+def test_optimization_api_errors_are_tenant_safe(settings: Settings) -> None:
+    app = _app(settings)
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(app) as client:
+        missing = client.get("/api/optimization-plans/nope", headers=headers)
+        execute_missing = client.post(
+            "/api/optimization-plans/nope/execute",
+            headers={**headers, "X-Operator-ID": "director"},
+        )
+        app.state.optimization_gate = app.state.optimization_gate.model_copy(
+            update={"passed": False}
+        )
+        gated = client.post(
+            "/api/optimization-plans",
+            json={"customer_id": "customerA", "capacity_by_action": {}},
+            headers=headers,
+        )
+    assert missing.status_code == 404
+    assert execute_missing.status_code == 404
+    assert gated.status_code == 503
+
+
+def test_optimization_api_maps_repository_and_small_inventory_errors(
+    settings: Settings,
+) -> None:
+    app = _app(settings)
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(app) as client:
+        repository = MagicMock()
+        repository.load_batches.side_effect = FileNotFoundError("gone")
+        app.state.batch_repository = repository
+        missing = client.post(
+            "/api/optimization-plans",
+            json={"customer_id": "customerA", "capacity_by_action": {}},
+            headers=headers,
+        )
+        repository.load_batches.side_effect = None
+        repository.load_batches.return_value = [
+            MagicMock(
+                batch_id="one",
+                material_name="one",
+                expiry_date=datetime(2026, 1, 2, tzinfo=UTC).date(),
+                stock_qty=1,
+            )
+        ]
+        repository.load_customer_config.return_value = MagicMock(
+            enabled_actions=[ActionType.REPORT_LOSS]
+        )
+        too_small = client.post(
+            "/api/optimization-plans",
+            json={
+                "customer_id": "customerA",
+                "today": "2026-01-01",
+                "capacity_by_action": {},
+            },
+            headers=headers,
+        )
+    assert missing.status_code == 404
+    assert too_small.status_code == 409
+
+
+def test_optimization_api_rejects_a_zero_allocation_plan(settings: Settings) -> None:
+    with TestClient(_app(settings)) as client:
+        response = client.post(
+            "/api/optimization-plans",
+            json={
+                "customer_id": "customerA",
+                "today": "2026-05-26",
+                "capacity_by_action": {},
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "plan allocates no inventory"
+
+
 def test_manual_scan_returns_batch_summary_and_replays_result(settings: Settings) -> None:
     with TestClient(_app(settings)) as client:
         payload = {"customer_id": "customerA", "today": "2026-05-26", "skip_llm": True}
@@ -133,7 +281,7 @@ def test_manual_scan_reports_unknown_customer_and_missing_provider(
             json={"customer_id": "missing", "skip_llm": True},
             headers=_headers("missing"),
         )
-    assert missing.status_code == 404
+    assert missing.status_code == 403
 
     unavailable = settings.model_copy(update={"llm_provider": "anthropic"})
     with TestClient(_app(unavailable)) as client:
@@ -245,6 +393,15 @@ def test_manual_scan_unexpected_failures_release_idempotency_claim(
 def test_work_order_unexpected_failure_releases_claim(settings: Settings) -> None:
     app = _app(settings)
     with TestClient(app) as client:
+        app.state.work_order_store.get = MagicMock(
+            return_value=WorkOrder(
+                work_order_id="WO",
+                batch_id="A-001",
+                customer_id="customerA",
+                material_name="test",
+                action=ActionType.TRANSFORM,
+            )
+        )
         app.state.work_order_store.complete = MagicMock(side_effect=RuntimeError("boom"))
         with pytest.raises(RuntimeError, match="boom"):
             client.post(
@@ -258,3 +415,51 @@ def test_work_order_unexpected_failure_releases_claim(settings: Settings) -> Non
             )
             is None
         )
+
+
+def test_command_store_lookup_failures_release_claim(settings: Settings) -> None:
+    app = _app(settings)
+    with TestClient(app) as client:
+        app.state.scan_runner.run_for_customer = AsyncMock(side_effect=FileNotFoundError("gone"))
+        scan = client.post(
+            "/api/scans",
+            json={"customer_id": "customerA", "skip_llm": True},
+            headers=_headers("gone"),
+        )
+        order = WorkOrder(
+            work_order_id="WO-KEY",
+            batch_id="A-001",
+            customer_id="customerA",
+            material_name="test",
+            action=ActionType.TRANSFORM,
+        )
+        app.state.work_order_store.get = MagicMock(return_value=order)
+        app.state.work_order_store.complete = MagicMock(side_effect=KeyError("gone"))
+        completion = client.post(
+            "/api/work-orders/WO-KEY/complete",
+            json={"actual_qty": 1, "actual_savings": 1, "source": "api"},
+            headers={**_headers("key-error"), "X-Operator-ID": "worker"},
+        )
+    assert scan.status_code == 404
+    assert completion.status_code == 404
+
+
+def test_cross_tenant_work_order_access_is_denied(settings: Settings) -> None:
+    restricted = settings.model_copy(update={"api_token_customers": "customerA"})
+    app = _app(restricted)
+    with TestClient(app) as client:
+        app.state.work_order_store.get = MagicMock(
+            return_value=WorkOrder(
+                work_order_id="WO-B",
+                batch_id="B-001",
+                customer_id="customerB",
+                material_name="other tenant",
+                action=ActionType.REPORT_LOSS,
+            )
+        )
+        response = client.post(
+            "/api/work-orders/WO-B/complete",
+            json={"actual_qty": 1, "actual_savings": 1, "source": "api"},
+            headers={**_headers("cross-tenant"), "X-Operator-ID": "worker"},
+        )
+    assert response.status_code == 403

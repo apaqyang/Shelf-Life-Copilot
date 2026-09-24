@@ -96,7 +96,7 @@ src/
 ├── main.py                     # 入口 ② FastAPI app（health/webhook/command API）
 │
 ├── api/                        # Bearer 鉴权的手动扫描 / 工单完成命令
-│   ├── router.py               # 幂等命令处理与 HTTP 错误映射
+│   ├── router.py               # 幂等命令、租户查询与优化计划 API
 │   └── schemas.py              # API request/response contracts
 │
 ├── models/                     # 数据契约层（叶子层，无业务依赖）
@@ -135,6 +135,10 @@ src/
 ├── scheduler/                  # 编排层
 │   ├── runner.py               # ScanRunner + ScanResult + ScanError
 │   └── scheduler.py            # DailyScheduler（APScheduler 包装）
+│
+├── task_queue.py              # 持久队列 + 可独立运行的扫描 worker
+├── optimization.py            # 跨批次模型、质量门禁与确定性基线
+├── admin.py                   # 仅消费稳定 API 的轻量管理界面
 │
 ├── wecom/                      # 渲染层 · 4 套卡片 + 推送 client（Protocol）
 │   ├── cards.py                # render_alert / render_work_order /
@@ -305,10 +309,10 @@ tests/
 | 真实 ERP / WMS 对接 | 开源核心提供 `BatchRepository` 插件边界 | SAP / 用友 / 金蝶适配器作为企业插件部署 |
 | 企微卡片渲染 | ✅ `src/wecom/cards.py`（4 模板，纯函数） | — |
 | 企微真实推送 | ✅ 群机器人 webhook | 交互式应用消息由企业插件提供 |
-| 决策与工单持久化 | ✅ SQLite，同意决策与工单原子写入 | v0.5+ 可迁移 PostgreSQL |
-| 改方案的多轮对话 | ❌（仅支持单轮） | 保持单轮；后续评估见 `ROADMAP.md` |
+| 决策与工单持久化 | ✅ SQLite + PostgreSQL adapters，同意决策与工单原子写入 | PostgreSQL 连接池装配 |
+| 改方案对话 | ✅ 单轮，会话与原建议可靠关联并审计 | 保持单轮边界 |
 | 月度 PDF 报告 | ✅ `src/reports/`（reportlab + STSong-Light CID 中文） | 接持久化决策日志驱动数据源 + 定时触发 |
-| 命令接口鉴权 | ✅ 静态 Bearer token | 租户级 JWT / RBAC |
+| 命令接口鉴权 | ✅ Bearer principal 到允许客户集合的映射 | JWT / RBAC |
 | 回调防重放 | ✅ 时间窗校验 + SQLite 幂等记录 | 多实例共享存储 |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
 
@@ -318,12 +322,13 @@ tests/
 
 | 关注点 | v0.1 实现 | 演进方向 |
 |---|---|---|
-| 日志 | `logging.basicConfig` 在 CLI 入口 | v0.5 结构化 JSON + correlation_id |
+| 日志 | 统一事件字段：customer/correlation/result/duration | JSON formatter / trace export |
 | 配置（API key 等） | `pydantic-settings` 从环境变量加载并校验 | 外部 secrets manager |
 | 错误处理 | per-batch try/except，ScanError 留痕 | + retry policy（指数退避） |
-| 并发 | scan 循环串行；SQLite WAL + 5s busy timeout + 连接内锁 | 对 LLM 调用增加有界并发 |
+| 并发 | LLM 有界并发且结果顺序稳定；SQLite WAL + 初始化/连接锁 | 多实例任务队列 |
 | 时区 | 持久化统一 UTC，调度/月报按 `Asia/Shanghai` 业务日历 | 按租户配置业务时区 |
-| 数据库生命周期 | FastAPI lifespan 拥有长连接，短任务使用 context manager | PostgreSQL 连接池 adapter |
+| 数据库生命周期 | FastAPI lifespan 拥有长连接；SQLite/PostgreSQL adapters | PostgreSQL 连接池装配 |
+| 指标 | `/metrics` 暴露扫描、LLM、推送、回调和报告计数/耗时 | Prometheus exporter |
 | 接口安全 | 生产环境安全回调加密；Bearer auth；body/rate limit；持久化幂等 | 分布式限流与密钥轮换 |
 
 ---

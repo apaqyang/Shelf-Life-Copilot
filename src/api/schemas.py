@@ -6,7 +6,42 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat
 
-from src.models import WorkOrder
+from src.models import ActionType, Batch, WorkOrder
+from src.optimization import OptimizationGate, OptimizationPlan
+
+
+class PageInfo(BaseModel):
+    next_cursor: int | None = None
+
+
+class CustomerSummary(BaseModel):
+    customer_id: str
+    industry: str
+
+
+class CustomerListResponse(BaseModel):
+    items: list[CustomerSummary]
+
+
+class BatchListResponse(BaseModel):
+    items: list[Batch]
+    page: PageInfo
+
+
+class WorkOrderListResponse(BaseModel):
+    items: list[WorkOrder]
+    page: PageInfo
+
+
+class OptimizationPlanRequest(BaseModel):
+    customer_id: str = Field(min_length=1)
+    capacity_by_action: dict[ActionType, NonNegativeFloat]
+    today: date | None = None
+
+
+class OptimizationPlanResponse(BaseModel):
+    plan: OptimizationPlan
+    gate: OptimizationGate
 
 
 class ManualScanRequest(BaseModel):

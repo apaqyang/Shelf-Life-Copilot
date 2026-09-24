@@ -129,7 +129,7 @@ Apache/GPL 的开源核心保证 **下载即用、源码可审、私有化部署
 | 模块 | 路径 | 状态 |
 |---|---|---|
 | 监测引擎（3 档预警阈值） | `src/alerts/` | ✅ |
-| LLM 建议生成器（Claude / KIMI / offline） | `src/suggestion/` | ✅ |
+| LLM 建议生成器（Claude / KIMI / 本地 OpenAI-compatible / offline） | `src/suggestion/` | ✅ |
 | 企微卡片（4 模板）+ 群机器人推送 | `src/wecom/` | ✅ |
 | 改方案单轮重生成 | `src/scheduler/runner.py::revise_for_batch` | ✅ |
 | 决策日志 SQLite 持久化 | `src/persistence/DecisionStore` | ✅ |
@@ -137,13 +137,18 @@ Apache/GPL 的开源核心保证 **下载即用、源码可审、私有化部署
 | 同意决策 + 工单原子创建（重复点击幂等） | `src/persistence/WorkOrderStore` | ✅ |
 | 工单完成回执 + 已核实节省月报 | `POST /api/work-orders/{id}/complete` | ✅ |
 | 认证手动扫描 API（限流/幂等） | `POST /api/scans` | ✅ |
+| 多租户查询 API + 管理台 | `GET /api/customers` + `/admin` | ✅ |
+| 评估门禁与跨批次处置计划 | `src/optimization.py` | ✅（人工批准） |
+| 持久任务队列与负载门禁 | `src/task_queue.py` | ✅ |
+| 结构化日志、运行指标与有界 LLM 并发 | `src/observability.py` | ✅ |
+| SQLite / PostgreSQL 持久化 adapters | `src/persistence/` | ✅ |
 | 月度 PDF 报告 + 摘要卡 + cron 定时 | `src/reports/` + `src/scheduler/monthly.py` | ✅ |
 | 路径 B 企微回调（去重/重放保护） | `src/webhook/` | ✅（生产需安全 crypto 插件） |
 | 长跑服务入口（FastAPI lifespan + 调度器） | `src/runtime/lifespan.py` | ✅ |
 | **企微回调 AES 加解密 + 签名校验** | — | 企业版插件 |
 | **ERP 对接插件**（SAP / 用友 / 金蝶 / 自研） | — | ⏳ v0.5+ |
 
-**当前指标**：460+ 测试 · 100% 覆盖率 · CI 全绿
+**当前指标**：500+ 测试 · 100% 覆盖率 · CI 全绿
 
 ---
 
@@ -183,6 +188,8 @@ uv run uvicorn src.main:app --host 0.0.0.0 --port 8000
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层 / 依赖图 / 设计决策记录 |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | 项目演进计划、目标架构与里程碑验收门槛 |
 | [docs/DEVELOPMENT_TASKS.md](docs/DEVELOPMENT_TASKS.md) | 按优先级、依赖与验收条件组织的开发任务清单 |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | SQLite 备份、恢复、发布回滚与演练手册 |
+| [docs/AVAILABILITY.md](docs/AVAILABILITY.md) | 调度可用性 SLO、持久队列和负载门禁 |
 | [docs/demo_samples/](docs/demo_samples/) | 现成的卡片样本 + 月度 PDF 报告 |
 
 ---
