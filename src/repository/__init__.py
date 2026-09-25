@@ -7,6 +7,7 @@ from src.repository.erp import (
     PagedERPRepository,
     PermanentERPError,
     RecoverableERPError,
+    SAPBusinessOneClient,
 )
 from src.repository.loader import DEFAULT_DATA_ROOT, load_batches, load_customer_config
 from src.repository.protocol import (
@@ -27,6 +28,7 @@ __all__ = [
     "PagedERPRepository",
     "PermanentERPError",
     "RecoverableERPError",
+    "SAPBusinessOneClient",
     "get_repository",
     "load_batches",
     "load_customer_config",

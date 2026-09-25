@@ -17,6 +17,7 @@ from typing import Any, Protocol, runtime_checkable
 import httpx
 
 from src.models import Card
+from src.observability import trace_headers
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,12 @@ class WebhookWecomClient:
 
     async def _post(self, http: httpx.AsyncClient, payload: Mapping[str, Any], card: Card) -> None:
         try:
-            resp = await http.post(self._url, json=payload, timeout=self._timeout)
+            resp = await http.post(
+                self._url,
+                json=payload,
+                timeout=self._timeout,
+                headers=trace_headers(),
+            )
         except httpx.HTTPError as exc:
             raise WecomPushError(f"HTTP transport failed: {exc}") from exc
 

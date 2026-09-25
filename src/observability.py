@@ -3,10 +3,58 @@
 from __future__ import annotations
 
 import logging
+import re
+import secrets
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from contextvars import ContextVar
 from threading import Lock
-from typing import Any
+from typing import Any, cast
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.types import ASGIApp
+
+_TRACEPARENT = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
+_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
+_span_id: ContextVar[str | None] = ContextVar("span_id", default=None)
+
+
+def current_traceparent() -> str | None:
+    trace_id = _trace_id.get()
+    span_id = _span_id.get()
+    return None if trace_id is None or span_id is None else f"00-{trace_id}-{span_id}-01"
+
+
+def trace_headers() -> dict[str, str]:
+    traceparent = current_traceparent()
+    return {} if traceparent is None else {"traceparent": traceparent}
+
+
+class TraceContextMiddleware(BaseHTTPMiddleware):
+    """Continue W3C trace context and expose it to outbound adapters."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        super().__init__(app)
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        incoming = request.headers.get("traceparent", "")
+        match = _TRACEPARENT.fullmatch(incoming)
+        trace_id = match.group(1) if match is not None else secrets.token_hex(16)
+        trace_token = _trace_id.set(trace_id)
+        span_token = _span_id.set(secrets.token_hex(8))
+        try:
+            response = await call_next(request)
+            response.headers["traceparent"] = current_traceparent() or ""
+            return response
+        finally:
+            _span_id.reset(span_token)
+            _trace_id.reset(trace_token)
 
 
 def log_event(
@@ -68,6 +116,33 @@ class MetricsRegistry:
         with self._lock:
             self._counters.clear()
             self._durations.clear()
+
+    def render_prometheus(self) -> str:
+        """Render a Prometheus text exposition snapshot for multi-instance scraping."""
+        snapshot = self.snapshot()
+        lines: list[str] = []
+        counters = cast(dict[str, float], snapshot["counters"])
+        durations = cast(dict[str, dict[str, float]], snapshot["durations"])
+        for raw_name, value in sorted(counters.items()):
+            name = _metric_name(raw_name)
+            lines.extend((f"# TYPE {name} counter", f"{name} {value:g}"))
+        for raw_name, values in sorted(durations.items()):
+            name = _metric_name(raw_name)
+            lines.extend(
+                (
+                    f"# TYPE {name}_milliseconds summary",
+                    f"{name}_milliseconds_count {values['count']:g}",
+                    f"{name}_milliseconds_sum {values['sum_ms']:g}",
+                )
+            )
+        return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _metric_name(name: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9_:]", "_", name)
+    if not normalized or normalized[0].isdigit():
+        normalized = f"shelf_life_{normalized}"
+    return normalized
 
 
 metrics = MetricsRegistry()

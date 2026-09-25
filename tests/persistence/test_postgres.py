@@ -201,6 +201,24 @@ def test_postgres_suggestion_contract() -> None:
         )
     )
     assert store.latest_for_batch("c", "b") == suggestion
+    connection.the_cursor.fetchone_values.append(
+        (
+            "b",
+            "c",
+            "report_loss",
+            10.0,
+            "why",
+            0.8,
+            True,
+            "local",
+            None,
+            suggestion.generated_at,
+        )
+    )
+    assert store.latest_for_batch_at("c", "b", suggestion.generated_at) == suggestion
+    assert "generated_at <= %s" in connection.the_cursor.queries[-1][0]
+    with pytest.raises(ValueError, match="timezone-aware"):
+        store.latest_for_batch_at("c", "b", datetime(2026, 1, 1))
     store.close()
     assert connection.closed
 

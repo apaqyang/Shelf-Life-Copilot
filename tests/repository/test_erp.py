@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -15,6 +16,7 @@ from src.repository import (
     PagedERPRepository,
     PermanentERPError,
     RecoverableERPError,
+    SAPBusinessOneClient,
 )
 
 
@@ -97,6 +99,92 @@ def test_json_and_erp_reject_duplicate_batch_ids(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="duplicate"):
         JsonRepository(tmp_path).load_batches("c")
+
+
+def test_sap_business_one_maps_pages_and_rotates_credentials() -> None:
+    requests: list[httpx.Request] = []
+    tokens = iter(("B1SESSION=token-1; ROUTEID=.node1", "token-2"))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        row = {
+            "Batch": f"b{len(requests)}",
+            "ItemCode": "item",
+            "ItemDescription": "Frozen food",
+            "ManufacturingDate": "2026-01-01T00:00:00Z",
+            "ExpirationDate": "2026-02-01T00:00:00Z",
+            "Quantity": 4,
+            "UoM": "kg",
+            "WarehouseCode": "w1",
+        }
+        body: dict[str, object] = {"value": [row]}
+        if len(requests) == 1:
+            body["@odata.nextLink"] = "/b1s/v2/SQLQueries('ShelfLifeBatches')/List?$skip=100"
+        return httpx.Response(200, json=body)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    client = SAPBusinessOneClient(
+        "https://sap.example", lambda: next(tokens), http_client=http, page_size=100
+    )
+    repository = PagedERPRepository(client, MagicMock())
+    batches = repository.load_batches("tenant'o")
+    assert [batch.batch_id for batch in batches] == ["b1", "b2"]
+    assert requests[0].headers["cookie"] == "B1SESSION=token-1; ROUTEID=.node1"
+    assert requests[1].headers["cookie"] == "B1SESSION=token-2"
+    assert requests[0].url.params["customerId"] == "tenant'o"
+    assert "b1s/v2/SQLQueries('ShelfLifeBatches')/List" in str(requests[0].url)
+    assert requests[0].headers["prefer"] == "odata.maxpagesize=100"
+    assert requests[1].url.params["$skip"] == "100"
+    client.close()
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [(429, RecoverableERPError), (503, RecoverableERPError), (401, PermanentERPError)],
+)
+def test_sap_business_one_classifies_http_errors(status: int, error_type: type[Exception]) -> None:
+    http = httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(status, text="secret"))
+    )
+    client = SAPBusinessOneClient("https://sap.example", lambda: "credential", http_client=http)
+    with pytest.raises(error_type, match="SAP"):
+        client.fetch_batches("tenant", cursor=None, timeout_seconds=1)
+
+
+def test_sap_business_one_rejects_transport_and_malformed_payloads() -> None:
+    def failed(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("credential should not leak", request=request)
+
+    transport_client = SAPBusinessOneClient(
+        "https://sap.example",
+        lambda: "credential",
+        http_client=httpx.Client(transport=httpx.MockTransport(failed)),
+    )
+    with pytest.raises(RecoverableERPError, match="transport") as raised:
+        transport_client.fetch_batches("tenant", cursor=None, timeout_seconds=1)
+    assert "credential" not in str(raised.value)
+
+    for payload in (
+        {"value": ["bad"]},
+        {"value": "not-a-list"},
+        {"value": [], "@odata.nextLink": 42},
+    ):
+        malformed = SAPBusinessOneClient(
+            "https://sap.example",
+            lambda: "credential",
+            http_client=httpx.Client(
+                transport=httpx.MockTransport(
+                    lambda _request, body=payload: httpx.Response(200, json=body)
+                )
+            ),
+        )
+        with pytest.raises(PermanentERPError, match="invalid SAP"):
+            malformed.fetch_batches("tenant", cursor=None, timeout_seconds=1)
+
+    with pytest.raises(ValueError, match="invalid SAP"):
+        SAPBusinessOneClient("ftp://sap.example", lambda: "credential")
+    with pytest.raises(ValueError, match="invalid SAP"):
+        SAPBusinessOneClient("https://sap.example", lambda: "credential", query_code="")
 
 
 def _contract_repository(

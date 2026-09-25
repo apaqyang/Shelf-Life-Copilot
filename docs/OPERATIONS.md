@@ -48,3 +48,13 @@ export POSTGRES_POOL_MAX_SIZE=10
 `RATE_LIMIT_REQUESTS` 和 `RATE_LIMIT_WINDOW_SECONDS` 必须在所有实例保持一致。PostgreSQL 使用数据库事务时间划分窗口，通过原子 upsert 增加配额，并在同一语句中清理过期窗口。数据库不可用时受保护的 POST 接口返回 `503`，应就 `rate_limit_backend_failure_total` 增长和 PostgreSQL 可用性告警，不要临时切回进程内限流。
 
 切换前必须单独备份现有 SQLite 库并完成数据导入验收；切换开关本身不会自动复制历史数据。回滚时停止应用、恢复切换前 SQLite 备份，再将 `PERSISTENCE_BACKEND` 改回 `sqlite`。
+
+## OIDC、Prometheus 与 Trace
+
+生产建议安装 `.[oidc,observability,postgres]`，设置 `AUTH_MODE=oidc` 及 issuer/audience/JWKS URL。OIDC 客户端必须在 `customer_ids` 声明发放租户列表，在 `roles` 声明发放 `viewer`、`operator` 或 `admin`。角色或租户拒绝会增加 `authorization_denied_total` 并输出 `authorization.denied` 审计事件。
+
+Prometheus 应拉取每个实例的 `/metrics`；不要对该端点做单实例粘滞会话。设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后应用将 FastAPI span 导出到 OTLP/HTTP collector。反向代理必须保留 `traceparent` 请求头和响应头。
+
+## SAP Business One
+
+设置 `ERP_BACKEND=sap_b1`、`SAP_B1_BASE_URL` 和会话 Cookie。SAP 侧需先建立受审核的 `ShelfLifeBatches` SQLQuery，输出 `Batch`、`ItemCode`、`ItemDescription`、`ManufacturingDate`、`ExpirationDate`、`Quantity`、`UoM` 和 `WarehouseCode`，并接收 `customerId` 参数。推荐使用 `SAP_B1_SESSION_COOKIE_FILE`存放 `B1SESSION=...; ROUTEID=...`：密钥管理器以原子 rename 替换文件后，下一个 SAP 请求即使用新会话，无需重启。生产启用前仍须在厂商沙箱执行分页、429、5xx、超时和凭据轮换验收；当前公开仓库不包含该凭据。

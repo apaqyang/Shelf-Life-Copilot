@@ -38,6 +38,10 @@ class SuggestionRepository(Protocol):
         self, customer_id: str, batch_id: str
     ) -> Suggestion | None: ...  # pragma: no cover
 
+    def latest_for_batch_at(
+        self, customer_id: str, batch_id: str, at: datetime
+    ) -> Suggestion | None: ...  # pragma: no cover
+
     def close(self) -> None: ...  # pragma: no cover
 
 

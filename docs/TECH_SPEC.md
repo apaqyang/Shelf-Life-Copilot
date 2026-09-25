@@ -138,7 +138,7 @@ business_timezone: str  # IANA 时区，默认 Asia/Shanghai
 ## 4. 核心接口
 
 ### 4.1 `POST /api/scans`
-使用 `Authorization: Bearer <API_TOKEN>` 和 `Idempotency-Key` 手动触发单客户扫描，内部复用 `ScanRunner`。
+使用 `Authorization: Bearer <token>` 和 `Idempotency-Key` 手动触发单客户扫描，内部复用 `ScanRunner`。静态兼容模式读取 `API_TOKEN`；OIDC 模式要求 `operator` 或 `admin` 角色及目标租户声明。
 - Request: `{"customer_id": "customerA", "today": "2026-05-26", "skip_llm": false}`
 - Response: 批次数、预警数、建议数、卡片数，以及全部扫描批次的成功/失败摘要
 - 相同幂等键完成后返回首次结果；正在处理时返回 `409`
@@ -163,6 +163,10 @@ business_timezone: str  # IANA 时区，默认 Asia/Shanghai
 
 `POST /api/optimization-plans` 在质量门禁通过后生成 `pending_approval` 计划。
 `POST /api/optimization-plans/{plan_id}/execute` 必须提供 `X-Operator-ID`，并在同一事务中记录批准、决策和工单。
+
+### 4.6 工单实绩质量
+
+`GET /api/quality/outcomes` 要求 `admin` 角色、租户声明以及带时区的 `start`/`end` 范围，返回按 provider 和动作分组的已核实偏差、绝对误差和回归门禁结果。
 
 ### 4.6 内部：`suggest(batch, customer_config) → Suggestion`
 LLM 建议生成器核心函数。
@@ -250,12 +254,15 @@ LLM 建议生成器核心函数。
   - `WECOM_TEST_GROUP_ID`（Demo 推送目标群）
   - `API_TOKEN`（`/api/*` Bearer token）
   - `API_TOKEN_CUSTOMERS`（token 可访问的客户集合）
+  - `AUTH_MODE`、`OIDC_ISSUER`、`OIDC_AUDIENCE`、`OIDC_JWKS_URL`（生产 JWT/OIDC）
   - `WEBHOOK_REPLAY_WINDOW_SECONDS`
   - `MAX_REQUEST_BODY_BYTES`
   - `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS`
   - `SCAN_CONCURRENCY`
   - `PERSISTENCE_BACKEND`（`sqlite` / `postgres`）
   - `POSTGRES_DSN` / `POSTGRES_POOL_MIN_SIZE` / `POSTGRES_POOL_MAX_SIZE`
+  - `ERP_BACKEND` / `SAP_B1_BASE_URL` / `SAP_B1_SESSION_COOKIE_FILE`
+  - `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_SERVICE_NAME`
   - `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY`
 - v0.5+：客户私有化部署支持（VPC / 厂内服务器）
 
@@ -270,15 +277,17 @@ LLM 建议生成器核心函数。
 - 企微回调使用时间窗校验和持久化幂等记录防重放；PostgreSQL 的原子 `ON CONFLICT` 认领保证跨实例仅一个处理者
 - 写接口使用请求体上限和按来源/路径限流；SQLite 单节点使用进程内滑动窗口，PostgreSQL 多实例使用数据库事务时间和原子固定窗口计数，共享同一配额；`/api/*` 还要求 Bearer token
 - 共享限流后端不可用时受保护写请求失败关闭并返回 `503`
+- 生产可使用 OIDC JWKS 验证 JWT 签名、issuer、audience 和时间声明；`viewer/operator/admin` 控制路由权限，租户/角色拒绝输出安全审计事件
 - v0.5+ 支持私有化部署，库存数据不出客户网
 
 ---
 
 ## 9. 监控
 
-- `/metrics` 提供扫描结果、LLM 成功/失败与延迟、推送失败、回调处理数和报告结果
+- `/metrics` 以 Prometheus text exposition 提供扫描结果、LLM 成功/失败与延迟、推送失败、回调处理数和报告结果
 - 日志事件统一包含 `customer_id`、`correlation_id`、`result` 和 `duration_ms`
-- 当前指标为单进程内存聚合；多实例部署需接 Prometheus 等共享后端
+- 多实例由 Prometheus 分别拉取并聚合；W3C `traceparent` 在 HTTP 入口、响应和外发企微/ERP 请求间传播，配置 OTLP endpoint 后导出 OpenTelemetry span
+- `/api/quality/outcomes` 仅使用已核实工单实绩，按 provider/动作计算偏差、绝对误差和归一化误差；历史工单关联决策时刻之前的最后一条建议
 - 每个租户可通过 `business_timezone` 配置 IANA 时区；每日扫描与月报按各自本地日历触发，持久化时间仍为 UTC
 
 ## 9.1 持久任务队列
@@ -291,7 +300,6 @@ APScheduler 只负责将每日扫描写入当前后端的持久队列，worker �
 
 ## 10. 后续开放点
 
-- ERP / WMS 真实对接
-- JWT/OIDC 与 RBAC
-- Prometheus/trace 导出与多实例运行告警
-- 工单实绩驱动的模型反向校准
+- SAP Business One 真实厂商沙箱在线验收（适配器与离线契约已完成）
+- OIDC 审计日志的长期归档策略
+- 已核实样本累积后的 provider 策略自动晋级

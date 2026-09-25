@@ -5,9 +5,13 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Protocol
 
+import httpx
+
 from src.models import Batch, CustomerConfig
+from src.observability import trace_headers
 from src.repository.protocol import BatchRepository
 
 
@@ -33,6 +37,98 @@ class ERPClient(Protocol):
     def fetch_batches(
         self, customer_id: str, *, cursor: str | None, timeout_seconds: float
     ) -> ERPPage: ...  # pragma: no cover
+
+
+class SAPBusinessOneClient:
+    """SAP Business One Service Layer adapter backed by a reviewed SQLQuery."""
+
+    def __init__(
+        self,
+        base_url: str,
+        session_cookie_provider: Callable[[], str],
+        *,
+        query_code: str = "ShelfLifeBatches",
+        page_size: int = 100,
+        http_client: httpx.Client | None = None,
+    ) -> None:
+        if not base_url.startswith(("https://", "http://")) or not query_code or page_size <= 0:
+            raise ValueError("invalid SAP Service Layer configuration")
+        self._base_url = base_url.rstrip("/")
+        self._session_cookie_provider = session_cookie_provider
+        self._query_code = query_code
+        self._page_size = page_size
+        self._http = http_client or httpx.Client()
+
+    def fetch_batches(
+        self, customer_id: str, *, cursor: str | None, timeout_seconds: float
+    ) -> ERPPage:
+        query_code = _odata_literal(self._query_code)
+        url = cursor or f"{self._base_url}/b1s/v2/SQLQueries('{query_code}')/List"
+        if cursor is not None and not cursor.startswith(("https://", "http://")):
+            url = f"{self._base_url}/{cursor.lstrip('/')}"
+        params: dict[str, str | int] | None = None
+        if cursor is None:
+            params = {
+                "customerId": customer_id,
+            }
+        cookie = self._session_cookie_provider()
+        if not cookie.startswith("B1SESSION="):
+            cookie = f"B1SESSION={cookie}"
+        try:
+            response = self._http.get(
+                url,
+                params=params,
+                headers={
+                    "Cookie": cookie,
+                    "Accept": "application/json",
+                    "Prefer": f"odata.maxpagesize={self._page_size}",
+                    **trace_headers(),
+                },
+                timeout=timeout_seconds,
+            )
+        except httpx.HTTPError as exc:
+            raise RecoverableERPError("SAP transport failure") from exc
+        if response.status_code == 429 or response.status_code >= 500:
+            raise RecoverableERPError(f"SAP transient HTTP {response.status_code}")
+        if response.status_code >= 400:
+            raise PermanentERPError(f"SAP rejected request with HTTP {response.status_code}")
+        try:
+            body = response.json()
+            rows = body["value"]
+            if not isinstance(rows, list):
+                raise TypeError
+            items = [_sap_batch(row, customer_id) for row in rows]
+            next_cursor = body.get("@odata.nextLink")
+            if next_cursor is not None and not isinstance(next_cursor, str):
+                raise TypeError
+        except (KeyError, TypeError, ValueError) as exc:
+            raise PermanentERPError("invalid SAP batch response") from exc
+        return ERPPage(items=items, next_cursor=next_cursor)
+
+    def close(self) -> None:
+        self._http.close()
+
+
+def _odata_literal(value: str) -> str:
+    return value.replace("'", "''")
+
+
+def _sap_batch(row: object, customer_id: str) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        raise TypeError
+    production_date = date.fromisoformat(str(row["ManufacturingDate"])[:10])
+    expiry_date = date.fromisoformat(str(row["ExpirationDate"])[:10])
+    return Batch(
+        batch_id=str(row["Batch"]),
+        customer_id=customer_id,
+        material_id=str(row["ItemCode"]),
+        material_name=str(row["ItemDescription"]),
+        production_date=production_date,
+        expiry_date=expiry_date,
+        stock_qty=float(row["Quantity"]),
+        unit=str(row["UoM"]),
+        warehouse=str(row["WarehouseCode"]),
+    ).model_dump(mode="json")
 
 
 class PagedERPRepository:

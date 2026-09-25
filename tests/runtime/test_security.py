@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from types import SimpleNamespace
+from typing import Annotated, Any, Protocol
 
-from fastapi import Depends, FastAPI
+import pytest
+from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
 from src.runtime.config import Settings
 from src.runtime.security import (
+    OIDCJWTVerifier,
     RequestGuardMiddleware,
     SlidingWindowRateLimiter,
+    authorize_customer,
     require_api_token,
+    require_roles,
 )
+from src.runtime.tenant import Principal, Role
+
+ViewerDependency = Annotated[Principal, Depends(require_roles(Role.VIEWER, Role.ADMIN))]
+AdminDependency = Annotated[Principal, Depends(require_roles(Role.ADMIN))]
 
 
 def test_sliding_window_expires_old_requests() -> None:
@@ -117,3 +126,96 @@ def test_shared_rate_limit_backend_failure_is_fail_closed() -> None:
         )
     assert response.status_code == 503
     assert response.json() == {"detail": "rate limit backend unavailable"}
+
+
+def _oidc_app(claims: dict[str, Any] | Exception) -> FastAPI:
+    app = FastAPI()
+    app.state.settings = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        auth_mode="oidc",
+        oidc_issuer="https://issuer.example",
+        oidc_audience="shelf-life",
+        oidc_jwks_url="https://issuer.example/jwks",
+    )
+
+    class Verifier:
+        def verify(self, token: str) -> dict[str, Any]:
+            if isinstance(claims, Exception):
+                raise claims
+            return claims
+
+    app.state.token_verifier = Verifier()
+
+    @app.get("/viewer")
+    async def viewer(principal: ViewerDependency) -> dict[str, str]:
+        return {"subject": principal.subject}
+
+    @app.get("/admin")
+    async def admin(
+        request: Request,
+        principal: AdminDependency,
+    ) -> dict[str, str]:
+        authorize_customer(request, principal, "tenant-b")
+        return {"subject": principal.subject}
+
+    return app
+
+
+def test_oidc_claims_drive_identity_roles_and_tenant_audit() -> None:
+    app = _oidc_app({"sub": "user-1", "customer_ids": "tenant-a,tenant-b", "roles": ["viewer"]})
+    with TestClient(app) as client:
+        accepted = client.get("/viewer", headers={"Authorization": "Bearer signed"})
+        role_denied = client.get("/admin", headers={"Authorization": "Bearer signed"})
+    assert accepted.json() == {"subject": "user-1"}
+    assert role_denied.status_code == 403
+
+    tenant_app = _oidc_app({"sub": "admin", "customer_ids": ["tenant-a"], "roles": "admin"})
+    with TestClient(tenant_app) as client:
+        tenant_denied = client.get("/admin", headers={"Authorization": "Bearer signed"})
+    assert tenant_denied.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"sub": "", "customer_ids": ["tenant"], "roles": ["viewer"]},
+        {"sub": "user", "customer_ids": 42, "roles": ["viewer"]},
+        {"sub": "user", "customer_ids": ["tenant"], "roles": ["unknown"]},
+        RuntimeError("invalid signature"),
+    ],
+)
+def test_oidc_invalid_tokens_and_claims_are_rejected(claims: dict[str, Any] | Exception) -> None:
+    with TestClient(_oidc_app(claims)) as client:
+        response = client.get("/viewer", headers={"Authorization": "Bearer signed"})
+        missing = client.get("/viewer")
+    assert response.status_code == 401
+    assert missing.status_code == 401
+
+
+def test_oidc_jwks_verifier_uses_restricted_algorithms(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+
+    class JWKClient:
+        def __init__(self, url: str, *, cache_keys: bool) -> None:
+            calls["client"] = (url, cache_keys)
+
+        def get_signing_key_from_jwt(self, token: str) -> SimpleNamespace:
+            calls["token"] = token
+            return SimpleNamespace(key="public-key")
+
+    def decode(token: str, key: str, **kwargs: Any) -> dict[str, Any]:
+        calls["decode"] = (token, key, kwargs)
+        return {"sub": "user"}
+
+    monkeypatch.setattr(
+        "src.runtime.security.import_module",
+        lambda _name: SimpleNamespace(PyJWKClient=JWKClient, decode=decode),
+    )
+    verifier = OIDCJWTVerifier(
+        jwks_url="https://issuer.example/jwks",
+        issuer="https://issuer.example",
+        audience="shelf-life",
+    )
+    assert verifier.verify("signed") == {"sub": "user"}
+    assert calls["client"] == ("https://issuer.example/jwks", True)
+    assert calls["decode"][2]["algorithms"] == ["RS256", "ES256"]

@@ -96,6 +96,35 @@ def test_tenant_query_api_lists_only_authorized_data(settings: Settings) -> None
     assert orders.json() == {"items": [], "page": {"next_cursor": None}}
 
 
+def test_quality_outcome_api_uses_verified_persistence_data(settings: Settings) -> None:
+    with TestClient(_app(settings)) as client:
+        response = client.get(
+            "/api/quality/outcomes",
+            params={
+                "customer_id": "customerA",
+                "start": "2026-01-01T00:00:00Z",
+                "end": "2027-01-01T00:00:00Z",
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert response.status_code == 200
+    assert response.json()["customer_id"] == "customerA"
+    assert response.json()["verified_count"] == 0
+    assert response.json()["gate_passed"] is False
+
+    with TestClient(_app(settings)) as client:
+        invalid = client.get(
+            "/api/quality/outcomes",
+            params={
+                "customer_id": "customerA",
+                "start": "2027-01-01T00:00:00",
+                "end": "2026-01-01T00:00:00",
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert invalid.status_code == 422
+
+
 def test_query_api_auth_validation_and_missing_source(settings: Settings) -> None:
     expanded = settings.model_copy(update={"api_token_customers": "customerA,missing"})
     with TestClient(_app(expanded)) as client:

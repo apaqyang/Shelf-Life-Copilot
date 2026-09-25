@@ -45,9 +45,9 @@ from src.persistence import (
 )
 from src.plugins import PluginRegistry, load_plugins
 from src.reports import ReportRunResult
-from src.repository import get_repository
+from src.repository import BatchRepository, PagedERPRepository, SAPBusinessOneClient, get_repository
 from src.runtime.config import Settings
-from src.runtime.security import SlidingWindowRateLimiter
+from src.runtime.security import OIDCJWTVerifier, SlidingWindowRateLimiter
 from src.scheduler import (
     DailyScheduler,
     MonthlyReportScheduler,
@@ -192,6 +192,15 @@ def build_lifespan(
         require_secure_webhook_crypto(is_development=settings.is_development)
         app.state.loaded_plugins = registry.loaded
         app.state.settings = settings
+        if settings.auth_mode == "oidc":
+            assert settings.oidc_jwks_url is not None  # noqa: S101 - settings validation
+            assert settings.oidc_issuer is not None  # noqa: S101 - settings validation
+            assert settings.oidc_audience is not None  # noqa: S101 - settings validation
+            app.state.token_verifier = OIDCJWTVerifier(
+                jwks_url=settings.oidc_jwks_url,
+                issuer=settings.oidc_issuer,
+                audience=settings.oidc_audience,
+            )
         if registry.loaded:
             logger.info("Enterprise plugins loaded: %s", registry.loaded)
         else:
@@ -245,7 +254,36 @@ def build_lifespan(
         app.state.optimization_plan_store = optimization_plan_store
         app.state.optimization_gate = evaluate_optimizer(default_evaluation_cases())
 
-        batch_repository = get_repository()
+        config_repository = get_repository()
+        sap_client: SAPBusinessOneClient | None = None
+        batch_repository: BatchRepository
+        if settings.erp_backend == "sap_b1":
+            assert settings.sap_b1_base_url is not None  # noqa: S101 - settings validation
+
+            def sap_session_cookie() -> str:
+                if settings.sap_b1_session_cookie_file is not None:
+                    cookie = settings.sap_b1_session_cookie_file.read_text(encoding="utf-8").strip()
+                else:
+                    assert settings.sap_b1_session_cookie is not None  # noqa: S101
+                    cookie = settings.sap_b1_session_cookie.get_secret_value()
+                if not cookie:
+                    raise RuntimeError("SAP session cookie is empty")
+                return cookie
+
+            sap_client = SAPBusinessOneClient(
+                settings.sap_b1_base_url,
+                sap_session_cookie,
+                query_code=settings.sap_b1_query_code,
+                page_size=settings.sap_b1_page_size,
+            )
+            batch_repository = PagedERPRepository(
+                sap_client,
+                config_repository,
+                timeout_seconds=settings.sap_b1_timeout_seconds,
+                max_retries=settings.sap_b1_max_retries,
+            )
+        else:
+            batch_repository = config_repository
         app.state.batch_repository = batch_repository
         customer_configs = {
             customer_id: batch_repository.load_customer_config(customer_id)
@@ -342,6 +380,8 @@ def build_lifespan(
             work_order_store.close()
             suggestion_store.close()
             decision_store.close()
+            if sap_client is not None:
+                sap_client.close()
             if postgres_database is not None:
                 postgres_database.close()
             logger.info("Schedulers shut down cleanly.")

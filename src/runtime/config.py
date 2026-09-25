@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_token: SecretStr | None = None
     api_token_customers: str = ""
+    auth_mode: Literal["static", "oidc"] = "static"
+    oidc_issuer: str | None = None
+    oidc_audience: str | None = None
+    oidc_jwks_url: str | None = None
+    oidc_customer_claim: str = "customer_ids"
+    oidc_role_claim: str = "roles"
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_service_name: str = "shelf-life-copilot"
     webhook_replay_window_seconds: int = 300
     max_request_body_bytes: int = 65_536
     rate_limit_requests: int = 60
@@ -47,6 +55,16 @@ class Settings(BaseSettings):
     postgres_pool_min_size: int = 1
     postgres_pool_max_size: int = 10
     reports_output_dir: Path = Path("docs/demo_samples")
+
+    # ── ERP source ────────────────────────────────────────────────────────
+    erp_backend: Literal["json", "sap_b1"] = "json"
+    sap_b1_base_url: str | None = None
+    sap_b1_session_cookie: SecretStr | None = None
+    sap_b1_session_cookie_file: Path | None = None
+    sap_b1_query_code: str = "ShelfLifeBatches"
+    sap_b1_page_size: int = 100
+    sap_b1_timeout_seconds: float = 10
+    sap_b1_max_retries: int = 2
 
     # ── daily scan cron ───────────────────────────────────────────────────
     # Comma-separated for friendliness; consumed via `scan_customers_list`.
@@ -106,6 +124,7 @@ class Settings(BaseSettings):
         "task_visibility_timeout_seconds",
         "postgres_pool_min_size",
         "postgres_pool_max_size",
+        "sap_b1_page_size",
     )
     @classmethod
     def _validate_positive(cls, v: int) -> int:
@@ -126,6 +145,22 @@ class Settings(BaseSettings):
             raise ValueError("POSTGRES_DSN is required when PERSISTENCE_BACKEND=postgres")
         if self.postgres_pool_min_size > self.postgres_pool_max_size:
             raise ValueError("POSTGRES_POOL_MIN_SIZE must not exceed POSTGRES_POOL_MAX_SIZE")
+        if self.auth_mode == "oidc" and not all(
+            (self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url)
+        ):
+            raise ValueError(
+                "OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL are required when AUTH_MODE=oidc"
+            )
+        if self.erp_backend == "sap_b1" and (
+            self.sap_b1_base_url is None
+            or (self.sap_b1_session_cookie is None and self.sap_b1_session_cookie_file is None)
+        ):
+            raise ValueError(
+                "SAP_B1_BASE_URL and a session cookie or cookie file are required "
+                "when ERP_BACKEND=sap_b1"
+            )
+        if self.sap_b1_timeout_seconds <= 0 or self.sap_b1_max_retries < 0:
+            raise ValueError("SAP timeout must be positive and retries non-negative")
         return self
 
     @property

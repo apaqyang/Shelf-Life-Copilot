@@ -386,14 +386,29 @@ class PostgresSuggestionStore(_PostgresStore):
             return int(str(row[0]))
 
     def latest_for_batch(self, customer_id: str, batch_id: str) -> Suggestion | None:
+        return self._latest(customer_id, batch_id, at=None)
+
+    def latest_for_batch_at(
+        self, customer_id: str, batch_id: str, at: datetime
+    ) -> Suggestion | None:
+        if at.tzinfo is None:
+            raise ValueError("suggestion lookup timestamp must be timezone-aware")
+        return self._latest(customer_id, batch_id, at=at.astimezone(UTC))
+
+    def _latest(self, customer_id: str, batch_id: str, *, at: datetime | None) -> Suggestion | None:
+        time_filter = "" if at is None else "AND generated_at <= %s"
+        params: tuple[object, ...] = (
+            (customer_id, batch_id) if at is None else (customer_id, batch_id, at)
+        )
         with self._borrow() as connection:
             cursor = connection.cursor()
             cursor.execute(
-                """SELECT batch_id,customer_id,action,savings_estimate,rationale,confidence,
+                f"""SELECT batch_id,customer_id,action,savings_estimate,rationale,confidence,
                           is_standard,llm_model,user_feedback,generated_at
                    FROM suggestions WHERE customer_id=%s AND batch_id=%s
+                   {time_filter}
                    ORDER BY generated_at DESC, id DESC LIMIT 1""",
-                (customer_id, batch_id),
+                params,
             )
             row = cursor.fetchone()
             return None if row is None else _suggestion_from_row(row)

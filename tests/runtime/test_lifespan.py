@@ -175,6 +175,75 @@ class TestLifespanWithoutLlmKey:
             assert isinstance(app.state.rate_limiter, PostgresRateLimiter)
         assert pool.closed
 
+    def test_oidc_verifier_is_owned_by_application_lifespan(
+        self,
+        base_settings: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        verifier = object()
+        factory = MagicMock(return_value=verifier)
+        monkeypatch.setattr("src.runtime.lifespan.OIDCJWTVerifier", factory)
+        settings = base_settings.model_copy(
+            update={
+                "auth_mode": "oidc",
+                "oidc_issuer": "https://issuer.example",
+                "oidc_audience": "shelf-life",
+                "oidc_jwks_url": "https://issuer.example/jwks",
+            }
+        )
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert app.state.token_verifier is verifier
+        factory.assert_called_once_with(
+            jwks_url="https://issuer.example/jwks",
+            issuer="https://issuer.example",
+            audience="shelf-life",
+        )
+
+    def test_sap_token_file_is_reloaded_for_credential_rotation(
+        self,
+        base_settings: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: object,
+    ) -> None:
+        token_file = tmp_path / "sap-token"  # type: ignore[operator]
+        token_file.write_text("first", encoding="utf-8")
+        sap_client = MagicMock()
+        factory = MagicMock(return_value=sap_client)
+        monkeypatch.setattr("src.runtime.lifespan.SAPBusinessOneClient", factory)
+        settings = base_settings.model_copy(
+            update={
+                "erp_backend": "sap_b1",
+                "sap_b1_base_url": "https://sap.example",
+                "sap_b1_session_cookie_file": token_file,
+            }
+        )
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            token_provider = factory.call_args.args[1]
+            assert token_provider() == "first"
+            token_file.write_text("second", encoding="utf-8")
+            assert token_provider() == "second"
+            token_file.write_text("", encoding="utf-8")
+            with pytest.raises(RuntimeError, match="empty"):
+                token_provider()
+        sap_client.close.assert_called_once()
+
+        static_client = MagicMock()
+        static_factory = MagicMock(return_value=static_client)
+        monkeypatch.setattr("src.runtime.lifespan.SAPBusinessOneClient", static_factory)
+        static_settings = base_settings.model_copy(
+            update={
+                "erp_backend": "sap_b1",
+                "sap_b1_base_url": "https://sap.example",
+                "sap_b1_session_cookie": SecretStr("static-token"),
+            }
+        )
+        static_app = FastAPI(lifespan=build_lifespan(static_settings))
+        for _ in _make_client(static_app):
+            static_provider = static_factory.call_args.args[1]
+            assert static_provider() == "static-token"
+
 
 class TestLifespanWithLlmKey:
     def test_daily_scheduler_started_when_provider_key_present(

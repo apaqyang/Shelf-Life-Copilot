@@ -31,15 +31,27 @@ from src.optimization import (
     priority_baseline,
 )
 from src.persistence import (
+    DecisionRepository,
     IdempotencyRepository,
     OptimizationPlanRepository,
     WorkOrderRepository,
 )
-from src.runtime.security import require_api_token
-from src.runtime.tenant import Principal
+from src.quality import OutcomeQualityReport, build_outcome_quality_report
+from src.runtime.security import authorize_customer, require_roles
+from src.runtime.tenant import Principal, Role
 from src.scheduler import ScanRunner
 
 router = APIRouter(prefix="/api")
+
+ViewerPrincipal = Annotated[
+    Principal,
+    Depends(require_roles(Role.VIEWER, Role.OPERATOR, Role.ADMIN)),
+]
+OperatorPrincipal = Annotated[
+    Principal,
+    Depends(require_roles(Role.OPERATOR, Role.ADMIN)),
+]
+AdminPrincipal = Annotated[Principal, Depends(require_roles(Role.ADMIN))]
 
 
 def _page(items: Sequence[object], cursor: int, limit: int) -> PageInfo:
@@ -49,7 +61,7 @@ def _page(items: Sequence[object], cursor: int, limit: int) -> PageInfo:
 @router.get("/customers", response_model=CustomerListResponse)
 async def list_customers(
     request: Request,
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: ViewerPrincipal,
 ) -> CustomerListResponse:
     repository = request.app.state.batch_repository
     items = []
@@ -66,11 +78,11 @@ async def list_customers(
 async def list_batches(
     customer_id: str,
     request: Request,
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: ViewerPrincipal,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[int, Query(ge=0)] = 0,
 ) -> BatchListResponse:
-    principal.require_customer(customer_id)
+    authorize_customer(request, principal, customer_id)
     try:
         all_items = request.app.state.batch_repository.load_batches(customer_id)
     except (FileNotFoundError, KeyError) as exc:
@@ -83,11 +95,11 @@ async def list_batches(
 async def list_work_orders(
     customer_id: str,
     request: Request,
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: ViewerPrincipal,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: Annotated[int, Query(ge=0)] = 0,
 ) -> WorkOrderListResponse:
-    principal.require_customer(customer_id)
+    authorize_customer(request, principal, customer_id)
     items = _work_order_store(request).list_for_customer(customer_id, limit=limit, offset=cursor)
     return WorkOrderListResponse(items=items, page=_page(items, cursor, limit))
 
@@ -108,13 +120,34 @@ def _optimization_store(request: Request) -> OptimizationPlanRepository:
     return cast(OptimizationPlanRepository, request.app.state.optimization_plan_store)
 
 
+@router.get("/quality/outcomes", response_model=OutcomeQualityReport)
+async def outcome_quality(
+    customer_id: str,
+    request: Request,
+    principal: AdminPrincipal,
+    start: datetime,
+    end: datetime,
+) -> OutcomeQualityReport:
+    authorize_customer(request, principal, customer_id)
+    if start.tzinfo is None or end.tzinfo is None or start >= end:
+        raise HTTPException(status_code=422, detail="quality period must be an ordered aware range")
+    decisions = cast(DecisionRepository, request.app.state.decision_store).list_for_period(
+        customer_id, start, end
+    )
+    return build_outcome_quality_report(
+        customer_id=customer_id,
+        decisions=decisions,
+        suggestion_for_batch=request.app.state.suggestion_store.latest_for_batch_at,
+    )
+
+
 @router.post("/optimization-plans", response_model=OptimizationPlanResponse)
 async def create_optimization_plan(
     command: OptimizationPlanRequest,
     request: Request,
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: AdminPrincipal,
 ) -> OptimizationPlanResponse:
-    principal.require_customer(command.customer_id)
+    authorize_customer(request, principal, command.customer_id)
     gate = request.app.state.optimization_gate
     if not gate.passed:
         raise HTTPException(status_code=503, detail="optimizer evaluation gate failed")
@@ -157,12 +190,12 @@ async def create_optimization_plan(
 async def get_optimization_plan(
     plan_id: str,
     request: Request,
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: ViewerPrincipal,
 ) -> OptimizationPlan:
     plan = _optimization_store(request).get(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="optimization plan not found")
-    principal.require_customer(plan.request.customer_id)
+    authorize_customer(request, principal, plan.request.customer_id)
     return plan
 
 
@@ -171,12 +204,12 @@ async def execute_optimization_plan(
     plan_id: str,
     request: Request,
     operator_id: Annotated[str, Header(alias="X-Operator-ID", min_length=1)],
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: AdminPrincipal,
 ) -> OptimizationPlan:
     plan = _optimization_store(request).get(plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="optimization plan not found")
-    principal.require_customer(plan.request.customer_id)
+    authorize_customer(request, principal, plan.request.customer_id)
     try:
         return _optimization_store(request).execute(
             plan_id, approved_by=operator_id, approved_at=datetime.now(UTC)
@@ -204,9 +237,9 @@ async def run_manual_scan(
     command: ManualScanRequest,
     request: Request,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: OperatorPrincipal,
 ) -> ManualScanResponse:
-    principal.require_customer(command.customer_id)
+    authorize_customer(request, principal, command.customer_id)
     store = _idempotency_store(request)
     key = f"manual_scan:{idempotency_key}"
     replay = _claim_or_replay(store, key, "manual_scan", ManualScanResponse)
@@ -262,12 +295,12 @@ async def complete_work_order(
     request: Request,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1)],
     operator_id: Annotated[str, Header(alias="X-Operator-ID", min_length=1)],
-    principal: Annotated[Principal, Depends(require_api_token)],
+    principal: OperatorPrincipal,
 ) -> WorkOrderCompletionResponse:
     existing = _work_order_store(request).get(work_order_id)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"work order {work_order_id!r} not found")
-    principal.require_customer(existing.customer_id)
+    authorize_customer(request, principal, existing.customer_id)
     idempotency = _idempotency_store(request)
     key = f"work_order_completion:{idempotency_key}"
     replay = _claim_or_replay(

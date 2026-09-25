@@ -39,6 +39,7 @@ class TestDefaults:
         assert s.app_env == "development"
         assert s.is_development
         assert s.api_token is None
+        assert s.auth_mode == "static"
         assert s.webhook_replay_window_seconds == 300
         assert s.decisions_db_path == Path("data/decisions.db")
         assert s.persistence_backend == "sqlite"
@@ -188,6 +189,29 @@ class TestValidation:
         monkeypatch.setenv("POSTGRES_POOL_MIN_SIZE", "5")
         monkeypatch.setenv("POSTGRES_POOL_MAX_SIZE", "2")
         with pytest.raises(ValueError, match="must not exceed"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_oidc_requires_complete_verifier_configuration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AUTH_MODE", "oidc")
+        monkeypatch.setenv("OIDC_ISSUER", "https://issuer.example")
+        monkeypatch.delenv("OIDC_AUDIENCE", raising=False)
+        monkeypatch.delenv("OIDC_JWKS_URL", raising=False)
+        with pytest.raises(ValueError, match="OIDC_ISSUER"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_sap_backend_requires_credentials_and_valid_retry_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("ERP_BACKEND", "sap_b1")
+        monkeypatch.delenv("SAP_B1_BASE_URL", raising=False)
+        with pytest.raises(ValueError, match="SAP_B1_BASE_URL"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+        monkeypatch.setenv("SAP_B1_BASE_URL", "https://sap.example")
+        monkeypatch.setenv("SAP_B1_SESSION_COOKIE", "B1SESSION=session; ROUTEID=.node1")
+        monkeypatch.setenv("SAP_B1_TIMEOUT_SECONDS", "0")
+        with pytest.raises(ValueError, match="SAP timeout"):
             Settings(_env_file=None)  # type: ignore[call-arg]
 
 

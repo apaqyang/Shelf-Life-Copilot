@@ -22,6 +22,12 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary,pool]>=3.2"]
+oidc = ["PyJWT[crypto]>=2.10"]
+observability = [
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-sdk>=1.28",
+]
 
 [dependency-groups]
 dev = [

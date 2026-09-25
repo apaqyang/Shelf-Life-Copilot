@@ -91,6 +91,30 @@ class TestSaveAndLookup:
 
 
 class TestLatestOrdering:
+    def test_latest_at_excludes_suggestions_generated_after_decision(
+        self, store: SuggestionStore
+    ) -> None:
+        before = _make_suggestion(
+            generated_at=datetime(2026, 5, 26, 8, tzinfo=UTC),
+            llm_model="before",
+        )
+        after = _make_suggestion(
+            generated_at=datetime(2026, 5, 26, 10, tzinfo=UTC),
+            llm_model="after",
+        )
+        store.save(before)
+        store.save(after)
+        assert (
+            store.latest_for_batch_at("customerA", "A-001", datetime(2026, 5, 26, 9, tzinfo=UTC))
+            == before
+        )
+        assert (
+            store.latest_for_batch_at("customerA", "A-001", datetime(2026, 5, 26, 7, tzinfo=UTC))
+            is None
+        )
+        with pytest.raises(ValueError, match="timezone-aware"):
+            store.latest_for_batch_at("customerA", "A-001", datetime(2026, 5, 26))
+
     def test_latest_compares_instants_across_timezone_offsets(self, store: SuggestionStore) -> None:
         shanghai = timezone(timedelta(hours=8))
         actually_earlier = _make_suggestion(

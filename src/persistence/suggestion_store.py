@@ -70,17 +70,30 @@ class SuggestionStore:
         return cur.lastrowid
 
     def latest_for_batch(self, customer_id: str, batch_id: str) -> Suggestion | None:
+        return self._latest(customer_id, batch_id, at=None)
+
+    def latest_for_batch_at(
+        self, customer_id: str, batch_id: str, at: datetime
+    ) -> Suggestion | None:
+        if at.tzinfo is None:
+            raise ValueError("suggestion lookup timestamp must be timezone-aware")
+        return self._latest(customer_id, batch_id, at=at.astimezone(UTC))
+
+    def _latest(self, customer_id: str, batch_id: str, *, at: datetime | None) -> Suggestion | None:
+        time_filter = "" if at is None else "AND generated_at <= ?"
+        parameters: tuple[object, ...] = (
+            (customer_id, batch_id) if at is None else (customer_id, batch_id, at.isoformat())
+        )
         row = self._db.fetchone(
-            """
-            SELECT batch_id, customer_id, action, savings_estimate,
+            f"""SELECT batch_id, customer_id, action, savings_estimate,
                    rationale, confidence, is_standard, llm_model,
                    user_feedback, generated_at
             FROM suggestions
-            WHERE customer_id = ? AND batch_id = ?
+            WHERE customer_id = ? AND batch_id = ? {time_filter}
             ORDER BY generated_at DESC
             LIMIT 1
-            """,
-            (customer_id, batch_id),
+            """,  # noqa: S608 - fragment is selected internally, never user input
+            parameters,
         )
         if row is None:
             return None
