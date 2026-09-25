@@ -16,7 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from src.observability import log_event, metrics
-from src.persistence import DecisionStore, IdempotencyStore, RevisionStore, SuggestionStore
+from src.persistence import (
+    DecisionRepository,
+    IdempotencyRepository,
+    RevisionRepository,
+    SuggestionRepository,
+)
 from src.runtime.config import Settings
 from src.scheduler import ScanRunner
 from src.webhook.crypto import get_webhook_crypto
@@ -31,26 +36,26 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def get_decision_store(request: Request) -> DecisionStore:
+def get_decision_store(request: Request) -> DecisionRepository:
     """Return the lifespan-owned decision store."""
-    return cast(DecisionStore, request.app.state.decision_store)
+    return cast(DecisionRepository, request.app.state.decision_store)
 
 
-def get_suggestion_store(request: Request) -> SuggestionStore:
+def get_suggestion_store(request: Request) -> SuggestionRepository:
     """Return the lifespan-owned suggestion store."""
-    return cast(SuggestionStore, request.app.state.suggestion_store)
+    return cast(SuggestionRepository, request.app.state.suggestion_store)
 
 
-def get_idempotency_store(request: Request) -> IdempotencyStore:
-    return cast(IdempotencyStore, request.app.state.idempotency_store)
+def get_idempotency_store(request: Request) -> IdempotencyRepository:
+    return cast(IdempotencyRepository, request.app.state.idempotency_store)
 
 
 def get_runtime_settings(request: Request) -> Settings:
     return cast(Settings, request.app.state.settings)
 
 
-def get_revision_store(request: Request) -> RevisionStore:
-    return cast(RevisionStore, request.app.state.revision_store)
+def get_revision_store(request: Request) -> RevisionRepository:
+    return cast(RevisionRepository, request.app.state.revision_store)
 
 
 def get_scan_runner(request: Request) -> ScanRunner:
@@ -97,11 +102,11 @@ async def verify_url(echostr: Annotated[str, Query(...)]) -> str:
 @router.post("/webhook/wecom")
 async def receive_event(
     event: WecomEvent,
-    store: Annotated[DecisionStore, Depends(get_decision_store)],
-    suggestion_store: Annotated[SuggestionStore, Depends(get_suggestion_store)],
-    idempotency_store: Annotated[IdempotencyStore, Depends(get_idempotency_store)],
+    store: Annotated[DecisionRepository, Depends(get_decision_store)],
+    suggestion_store: Annotated[SuggestionRepository, Depends(get_suggestion_store)],
+    idempotency_store: Annotated[IdempotencyRepository, Depends(get_idempotency_store)],
     settings: Annotated[Settings, Depends(get_runtime_settings)],
-    revision_store: Annotated[RevisionStore, Depends(get_revision_store)],
+    revision_store: Annotated[RevisionRepository, Depends(get_revision_store)],
     scan_runner: Annotated[ScanRunner, Depends(get_scan_runner)],
 ) -> WecomCallbackResponse:
     """Route a WeCom callback event to the click handler, or 200 no-op."""

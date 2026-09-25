@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -22,6 +23,7 @@ class CustomerConfig(BaseModel):
     industry_phrases: dict[ActionType, str] = Field(default_factory=dict)
     alert_thresholds: AlertThresholds
     decision_makers: list[str]
+    business_timezone: str = "Asia/Shanghai"
     avg_savings_per_batch: float = Field(default=5000.0, gt=0.0)
     annual_baseline_loss: float = Field(default=1.0, gt=0.0)
 
@@ -35,6 +37,15 @@ class CustomerConfig(BaseModel):
         raise TypeError(
             f"alert_thresholds must be a dict or AlertThresholds, got {type(value).__name__}"
         )
+
+    @field_validator("business_timezone")
+    @classmethod
+    def _validate_business_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"unknown IANA business timezone: {value!r}") from exc
+        return value
 
     @model_validator(mode="after")
     def _check_action_consistency(self) -> CustomerConfig:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from src.models import ActionType, Decision, DecisionOutcome
 from src.persistence import DecisionStore
@@ -136,6 +137,21 @@ class TestRunMonthlyReports:
         )
         assert results[0].data is not None
         assert results[0].data.month == "2026-12"
+
+    def test_reads_from_injected_decision_repository(self, tmp_path: Path) -> None:
+        repository = MagicMock()
+        repository.list_for_period.return_value = [
+            _decision(decided_at=datetime(2026, 5, 10, tzinfo=UTC))
+        ]
+        results = run_monthly_reports(
+            today=date(2026, 6, 1),
+            db_path=tmp_path / "unused.db",
+            output_dir=tmp_path / "out",
+            baselines={"customerA": 1_500_000.0},
+            decision_repository=repository,
+        )
+        assert results[0].data is not None
+        repository.list_for_period.assert_called_once()
 
 
 class TestReportRunResultModel:

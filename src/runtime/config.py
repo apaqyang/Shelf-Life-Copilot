@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,7 +41,11 @@ class Settings(BaseSettings):
     task_visibility_timeout_seconds: int = 300
 
     # ── persistence / output ──────────────────────────────────────────────
+    persistence_backend: Literal["sqlite", "postgres"] = "sqlite"
     decisions_db_path: Path = Path("data/decisions.db")
+    postgres_dsn: SecretStr | None = None
+    postgres_pool_min_size: int = 1
+    postgres_pool_max_size: int = 10
     reports_output_dir: Path = Path("docs/demo_samples")
 
     # ── daily scan cron ───────────────────────────────────────────────────
@@ -100,6 +104,8 @@ class Settings(BaseSettings):
         "scan_concurrency",
         "task_worker_max_attempts",
         "task_visibility_timeout_seconds",
+        "postgres_pool_min_size",
+        "postgres_pool_max_size",
     )
     @classmethod
     def _validate_positive(cls, v: int) -> int:
@@ -113,6 +119,14 @@ class Settings(BaseSettings):
         if v <= 0:
             raise ValueError("task worker poll interval must be positive")
         return v
+
+    @model_validator(mode="after")
+    def _validate_persistence(self) -> Settings:
+        if self.persistence_backend == "postgres" and self.postgres_dsn is None:
+            raise ValueError("POSTGRES_DSN is required when PERSISTENCE_BACKEND=postgres")
+        if self.postgres_pool_min_size > self.postgres_pool_max_size:
+            raise ValueError("POSTGRES_POOL_MIN_SIZE must not exceed POSTGRES_POOL_MAX_SIZE")
+        return self
 
     @property
     def is_development(self) -> bool:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 
@@ -41,3 +43,20 @@ def test_invalid_claim_or_missing_completion_is_rejected() -> None:
             store.claim("key", "")
         with pytest.raises(KeyError, match="not found"):
             store.complete("missing", status_code=200, response_json="{}")
+
+
+def test_concurrent_instances_claim_shared_request_only_once(tmp_path: Path) -> None:
+    path = tmp_path / "shared-idempotency.db"
+    with IdempotencyStore(path):
+        pass
+    barrier = Barrier(2)
+
+    def claim() -> bool:
+        with IdempotencyStore(path) as store:
+            barrier.wait()
+            return store.claim("same-request", "scan") is None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _index: claim(), range(2)))
+
+    assert sorted(results) == [False, True]

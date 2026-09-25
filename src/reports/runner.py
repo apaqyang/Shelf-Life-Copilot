@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from src.persistence import DecisionRepository
 from src.reports.aggregator import MonthlyReportData, aggregate_monthly_report
 from src.reports.renderer import render_monthly_report_pdf
-from src.reports.sources import load_decisions_from_sqlite
+from src.reports.sources import load_decisions, load_decisions_from_sqlite
 from src.repository import get_repository
 
 
@@ -44,6 +45,8 @@ def run_monthly_reports(
     db_path: Path | str,
     output_dir: Path,
     baselines: dict[str, float],
+    business_timezones: dict[str, str] | None = None,
+    decision_repository: DecisionRepository | None = None,
 ) -> list[ReportRunResult]:
     """Aggregate + render PDFs for the previous month, one per customer in `baselines`."""
     month = previous_month(today)
@@ -51,7 +54,21 @@ def run_monthly_reports(
 
     results: list[ReportRunResult] = []
     for customer_id, baseline in baselines.items():
-        decisions = load_decisions_from_sqlite(db_path, customer_id, month)
+        timezone = (business_timezones or {}).get(customer_id, "Asia/Shanghai")
+        if decision_repository is None:
+            decisions = load_decisions_from_sqlite(
+                db_path,
+                customer_id,
+                month,
+                timezone=timezone,
+            )
+        else:
+            decisions = load_decisions(
+                decision_repository,
+                customer_id,
+                month,
+                timezone=timezone,
+            )
         if not decisions:
             results.append(
                 ReportRunResult(

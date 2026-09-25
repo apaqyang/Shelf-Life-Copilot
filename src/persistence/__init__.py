@@ -5,13 +5,21 @@ from src.persistence.idempotency_store import IdempotencyRecord, IdempotencyStor
 from src.persistence.migrations import LATEST_SCHEMA_VERSION
 from src.persistence.optimization_store import OptimizationPlanStore
 from src.persistence.postgres import (
+    PostgresDatabase,
     PostgresDecisionStore,
+    PostgresIdempotencyStore,
+    PostgresOptimizationPlanStore,
+    PostgresRateLimiter,
+    PostgresRevisionStore,
     PostgresSuggestionStore,
     PostgresWorkOrderStore,
     run_postgres_migrations,
 )
 from src.persistence.protocols import (
     DecisionRepository,
+    IdempotencyRepository,
+    OptimizationPlanRepository,
+    RevisionRepository,
     SuggestionRepository,
     WorkOrderRepository,
 )
@@ -25,11 +33,19 @@ __all__ = [
     "RevisionSession",
     "RevisionStore",
     "PostgresDecisionStore",
+    "PostgresDatabase",
+    "PostgresIdempotencyStore",
+    "PostgresOptimizationPlanStore",
+    "PostgresRateLimiter",
+    "PostgresRevisionStore",
     "PostgresSuggestionStore",
     "PostgresWorkOrderStore",
     "IdempotencyRecord",
     "IdempotencyStore",
     "DecisionRepository",
+    "IdempotencyRepository",
+    "OptimizationPlanRepository",
+    "RevisionRepository",
     "DecisionStore",
     "SuggestionRepository",
     "SuggestionStore",

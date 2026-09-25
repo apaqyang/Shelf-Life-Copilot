@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfoNotFoundError
 
 import pytest
 from apscheduler.triggers.cron import CronTrigger
@@ -38,6 +39,29 @@ class TestDailySchedulerInit:
     def test_registers_one_job_per_customer(self, runner: AsyncMock) -> None:
         scheduler = DailyScheduler(runner=runner, customer_ids=["customerA", "customerB"])
         assert set(scheduler.job_ids) == {"scan-customerA", "scan-customerB"}
+
+    def test_uses_each_customers_business_timezone(self, runner: AsyncMock) -> None:
+        scheduler = DailyScheduler(
+            runner=runner,
+            customer_ids=["customerA", "customerB"],
+            customer_timezones={
+                "customerA": "Asia/Shanghai",
+                "customerB": "America/Los_Angeles",
+            },
+        )
+        first = scheduler._scheduler.get_job("scan-customerA")  # noqa: SLF001
+        second = scheduler._scheduler.get_job("scan-customerB")  # noqa: SLF001
+        assert first is not None and second is not None
+        assert str(first.trigger.timezone) == "Asia/Shanghai"
+        assert str(second.trigger.timezone) == "America/Los_Angeles"
+
+    def test_unknown_customer_timezone_rejected(self, runner: AsyncMock) -> None:
+        with pytest.raises(ZoneInfoNotFoundError, match="Mars/Olympus"):
+            DailyScheduler(
+                runner=runner,
+                customer_ids=["customerA"],
+                customer_timezones={"customerA": "Mars/Olympus"},
+            )
 
     def test_empty_customer_ids_rejected(self, runner: AsyncMock) -> None:
         with pytest.raises(ValueError, match="must not be empty"):

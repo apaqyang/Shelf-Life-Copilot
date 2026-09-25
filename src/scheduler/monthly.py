@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,19 +19,20 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from src.observability import log_event, metrics
+from src.persistence import DecisionRepository
 from src.reports import ReportRunResult, run_monthly_reports
 
 logger = logging.getLogger(__name__)
 
 ReportResultCallback = Callable[[ReportRunResult], Awaitable[None]]
 
-_JOB_ID = "monthly-report"
+_JOB_ID_PREFIX = "monthly-report"
 
 
 class MonthlyReportScheduler:
     """Run `run_monthly_reports` on a monthly cron, dispatch each result to a callback.
 
-    Construction registers one APScheduler job; call `start()` to begin firing
+    Construction registers one APScheduler job per customer; call `start()` to begin firing
     (requires a running asyncio event loop), `shutdown()` to stop. Use
     `run_now()` to invoke the body once for manual triggering / testing.
     """
@@ -46,6 +47,8 @@ class MonthlyReportScheduler:
         hour: int = 8,
         minute: int = 0,
         timezone: str = "Asia/Shanghai",
+        customer_timezones: Mapping[str, str] | None = None,
+        decision_repository: DecisionRepository | None = None,
         on_result: ReportResultCallback | None = None,
     ) -> None:
         # day capped at 28 so we never hit a non-existent calendar day (Feb 29/30/31).
@@ -60,16 +63,33 @@ class MonthlyReportScheduler:
         self._output_dir = output_dir
         self._baselines = baselines
         self._on_result = on_result
-        self._timezone = ZoneInfo(timezone)
+        self._decision_repository = decision_repository
+        configured_timezones = customer_timezones or {}
+        self._timezones = {
+            customer_id: ZoneInfo(configured_timezones.get(customer_id, timezone))
+            for customer_id in baselines
+        }
         self._scheduler = AsyncIOScheduler()
-        self._scheduler.add_job(
-            self.run_now,
-            trigger=CronTrigger(day=day, hour=hour, minute=minute, timezone=self._timezone),
-            id=_JOB_ID,
-            replace_existing=True,
-        )
+        for customer_id in baselines:
+            self._scheduler.add_job(
+                self._run_one_customer,
+                trigger=CronTrigger(
+                    day=day,
+                    hour=hour,
+                    minute=minute,
+                    timezone=self._timezones[customer_id],
+                ),
+                args=[customer_id],
+                id=f"{_JOB_ID_PREFIX}-{customer_id}",
+                replace_existing=True,
+            )
 
     async def run_now(self) -> None:
+        """Run every configured customer's report immediately."""
+        for customer_id in self._baselines:
+            await self._run_one_customer(customer_id)
+
+    async def _run_one_customer(self, customer_id: str) -> None:
         """Trigger one report cycle: aggregate → PDF → fan-out callbacks.
 
         Wraps the orchestrator in a broad try/except so a sqlite glitch or PDF
@@ -79,10 +99,12 @@ class MonthlyReportScheduler:
         started = time.perf_counter()
         try:
             results = run_monthly_reports(
-                today=datetime.now(self._timezone).date(),
+                today=datetime.now(self._timezones[customer_id]).date(),
                 db_path=self._db_path,
                 output_dir=self._output_dir,
-                baselines=self._baselines,
+                baselines={customer_id: self._baselines[customer_id]},
+                business_timezones={customer_id: str(self._timezones[customer_id])},
+                decision_repository=self._decision_repository,
             )
         except Exception:  # noqa: BLE001
             duration_ms = (time.perf_counter() - started) * 1000
@@ -92,7 +114,7 @@ class MonthlyReportScheduler:
                 logger,
                 logging.ERROR,
                 "report.failed",
-                customer_id="all",
+                customer_id=customer_id,
                 correlation_id="monthly",
                 result="failure",
                 duration_ms=duration_ms,
@@ -106,7 +128,7 @@ class MonthlyReportScheduler:
             logger,
             logging.INFO,
             "report.completed",
-            customer_id="all",
+            customer_id=customer_id,
             correlation_id="monthly",
             result="success",
             duration_ms=duration_ms,

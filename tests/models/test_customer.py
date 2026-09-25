@@ -31,6 +31,7 @@ class TestCustomerConfigParsing:
         assert config.customer_id == "customerA"
         assert ActionType.TRANSFORM in config.enabled_actions
         assert config.alert_thresholds == AlertThresholds(yellow=30, orange=15, red=7)
+        assert config.business_timezone == "Asia/Shanghai"
 
     def test_industry_phrases_keys_coerce_to_action_type(self) -> None:
         config = CustomerConfig.model_validate(_base_payload())
@@ -71,6 +72,14 @@ class TestCustomerConfigInvariants:
         payload = _base_payload(alert_thresholds="not_a_dict")
         with pytest.raises(TypeError, match="must be a dict or AlertThresholds"):
             CustomerConfig.model_validate(payload)
+
+    def test_business_timezone_accepts_iana_name(self) -> None:
+        config = CustomerConfig.model_validate(_base_payload(business_timezone="America/New_York"))
+        assert config.business_timezone == "America/New_York"
+
+    def test_unknown_business_timezone_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="unknown IANA business timezone"):
+            CustomerConfig.model_validate(_base_payload(business_timezone="Mars/Olympus"))
 
 
 class TestCustomerConfigAvgSavings:

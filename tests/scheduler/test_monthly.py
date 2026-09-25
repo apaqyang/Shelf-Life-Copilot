@@ -80,13 +80,13 @@ class TestInit:
                 minute=60,
             )
 
-    def test_registers_single_monthly_job(self, tmp_path: Path) -> None:
+    def test_registers_one_monthly_job_per_customer(self, tmp_path: Path) -> None:
         sched = MonthlyReportScheduler(
             db_path=tmp_path / "d.db",
             output_dir=tmp_path / "out",
             baselines={"customerA": 1.0},
         )
-        assert sched.job_ids == ["monthly-report"]
+        assert sched.job_ids == ["monthly-report-customerA"]
 
     def test_cron_trigger_defaults_to_day1_08_00_shanghai(self, tmp_path: Path) -> None:
         sched = MonthlyReportScheduler(
@@ -94,7 +94,7 @@ class TestInit:
             output_dir=tmp_path / "out",
             baselines={"customerA": 1.0},
         )
-        job = sched._scheduler.get_job("monthly-report")
+        job = sched._scheduler.get_job("monthly-report-customerA")
         assert job is not None
         trigger = job.trigger
         assert isinstance(trigger, CronTrigger)
@@ -103,6 +103,19 @@ class TestInit:
         assert fields["hour"] == "8"
         assert fields["minute"] == "0"
         assert str(trigger.timezone) == "Asia/Shanghai"
+
+    def test_cron_uses_each_customers_business_timezone(self, tmp_path: Path) -> None:
+        sched = MonthlyReportScheduler(
+            db_path=tmp_path / "d.db",
+            output_dir=tmp_path / "out",
+            baselines={"customerA": 1.0, "customerB": 1.0},
+            customer_timezones={"customerB": "America/Los_Angeles"},
+        )
+        first = sched._scheduler.get_job("monthly-report-customerA")
+        second = sched._scheduler.get_job("monthly-report-customerB")
+        assert first is not None and second is not None
+        assert str(first.trigger.timezone) == "Asia/Shanghai"
+        assert str(second.trigger.timezone) == "America/Los_Angeles"
 
 
 class TestRun:

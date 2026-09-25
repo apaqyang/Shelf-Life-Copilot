@@ -2,7 +2,7 @@
 
 Starting `uvicorn src.main:app` brings up the full v0.1 service:
 - DailyScheduler 07:00 (if LLM key configured)
-- MonthlyReportScheduler day 1 08:00 Asia/Shanghai
+- MonthlyReportScheduler day 1 08:00 in each tenant's business timezone
 - POST /webhook/wecom for click callbacks
 - GET /health for liveness probes
 """

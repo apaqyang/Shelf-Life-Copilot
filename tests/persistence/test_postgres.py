@@ -138,6 +138,8 @@ def test_postgres_decision_contract_and_approval_paths() -> None:
     assert store.list_for_period(
         "c", datetime(2025, 1, 1, tzinfo=UTC), datetime(2027, 1, 1, tzinfo=UTC)
     ) == [_decision()]
+    with pytest.raises(ValueError, match="timezone-aware"):
+        store.list_for_period("c", datetime(2025, 1, 1), datetime(2027, 1, 1, tzinfo=UTC))
     order = WorkOrder(
         work_order_id="wo",
         batch_id="b",
@@ -145,6 +147,20 @@ def test_postgres_decision_contract_and_approval_paths() -> None:
         material_name="food",
         action=ActionType.REPORT_LOSS,
     )
+    with pytest.raises(ValueError, match="approved"):
+        store.record_approval(
+            _decision().model_copy(update={"outcome": DecisionOutcome.SNOOZED}),
+            order,
+            idempotency_key="snoozed",
+        )
+    with pytest.raises(ValueError, match="idempotency_key"):
+        store.record_approval(_decision(), order, idempotency_key="")
+    with pytest.raises(ValueError, match="same approval"):
+        store.record_approval(
+            _decision(),
+            order.model_copy(update={"batch_id": "different"}),
+            idempotency_key="different",
+        )
     connection.the_cursor.fetchone_values.append((8,))
     assert store.record_approval(_decision(), order, idempotency_key="new") == (8, order, True)
 

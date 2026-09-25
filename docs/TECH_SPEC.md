@@ -130,6 +130,7 @@ disabled_actions: list[str]
 industry_phrases: dict[str, str]
 alert_thresholds: dict  # {yellow: 30, orange: 15, red: 7}
 decision_makers: list[str]  # 企微 userid
+business_timezone: str  # IANA 时区，默认 Asia/Shanghai
 ```
 
 ---
@@ -163,10 +164,10 @@ decision_makers: list[str]  # 企微 userid
 `POST /api/optimization-plans` 在质量门禁通过后生成 `pending_approval` 计划。
 `POST /api/optimization-plans/{plan_id}/execute` 必须提供 `X-Operator-ID`，并在同一事务中记录批准、决策和工单。
 
-### 4.4 内部：`suggest(batch, customer_config) → Suggestion`
+### 4.6 内部：`suggest(batch, customer_config) → Suggestion`
 LLM 建议生成器核心函数。
 
-### 4.5 内部：`regenerate(original_suggestion, user_feedback) → Suggestion`
+### 4.7 内部：`regenerate(original_suggestion, user_feedback) → Suggestion`
 改方案单轮重生成。
 
 ---
@@ -205,7 +206,8 @@ LLM 建议生成器核心函数。
     "discount_clearance": "打折清仓至 B2B 渠道"
   },
   "alert_thresholds": {"yellow": 30, "orange": 15, "red": 7},
-  "decision_makers": ["wecom_userid_zhangzong"]
+  "decision_makers": ["wecom_userid_zhangzong"],
+  "business_timezone": "Asia/Shanghai"
 }
 ```
 
@@ -226,7 +228,8 @@ LLM 建议生成器核心函数。
     "discount_clearance": "打折清仓至社区团购"
   },
   "alert_thresholds": {"yellow": 14, "orange": 7, "red": 3},
-  "decision_makers": ["wecom_userid_lizong"]
+  "decision_makers": ["wecom_userid_lizong"],
+  "business_timezone": "Asia/Shanghai"
 }
 ```
 
@@ -239,6 +242,8 @@ LLM 建议生成器核心函数。
 - 本地 `docker-compose up`（Python 服务 + SQLite 卷）
 - SQLite 启动时自动执行带版本迁移；迁移单版本事务失败时回滚
 - 运行时使用 WAL、5 秒 busy timeout 和显式连接关闭
+- PostgreSQL 通过 `uv sync --extra postgres` 安装驱动；启动时在连接池中执行幂等 schema 迁移
+- 后端由 `PERSISTENCE_BACKEND` 显式选择；选择 PostgreSQL 时修订、优化、幂等、队列、月报和限流配额共享同一数据库边界
 - 环境变量：
   - `ANTHROPIC_API_KEY`
   - `WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET`
@@ -249,6 +254,8 @@ LLM 建议生成器核心函数。
   - `MAX_REQUEST_BODY_BYTES`
   - `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS`
   - `SCAN_CONCURRENCY`
+  - `PERSISTENCE_BACKEND`（`sqlite` / `postgres`）
+  - `POSTGRES_DSN` / `POSTGRES_POOL_MIN_SIZE` / `POSTGRES_POOL_MAX_SIZE`
   - `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY`
 - v0.5+：客户私有化部署支持（VPC / 厂内服务器）
 
@@ -260,8 +267,9 @@ LLM 建议生成器核心函数。
 - 所有 prompt + 模型响应留痕（用于追溯）
 - 越界请求即便生成卡片，工单生成前需运营/实施二次确认
 - 生产环境启动时强制使用安全的企微消息加密适配器
-- 企微回调使用时间窗校验和 SQLite 幂等记录防重放
-- 写接口使用请求体上限和按来源/路径的滑动窗口限流；`/api/*` 还要求 Bearer token
+- 企微回调使用时间窗校验和持久化幂等记录防重放；PostgreSQL 的原子 `ON CONFLICT` 认领保证跨实例仅一个处理者
+- 写接口使用请求体上限和按来源/路径限流；SQLite 单节点使用进程内滑动窗口，PostgreSQL 多实例使用数据库事务时间和原子固定窗口计数，共享同一配额；`/api/*` 还要求 Bearer token
+- 共享限流后端不可用时受保护写请求失败关闭并返回 `503`
 - v0.5+ 支持私有化部署，库存数据不出客户网
 
 ---
@@ -271,19 +279,19 @@ LLM 建议生成器核心函数。
 - `/metrics` 提供扫描结果、LLM 成功/失败与延迟、推送失败、回调处理数和报告结果
 - 日志事件统一包含 `customer_id`、`correlation_id`、`result` 和 `duration_ms`
 - 当前指标为单进程内存聚合；多实例部署需接 Prometheus 等共享后端
+- 每个租户可通过 `business_timezone` 配置 IANA 时区；每日扫描与月报按各自本地日历触发，持久化时间仍为 UTC
 
 ## 9.1 持久任务队列
 
-APScheduler 只负责将每日扫描写入 SQLite 持久队列，worker 独立认领、重试和完成任务。
+APScheduler 只负责将每日扫描写入当前后端的持久队列，worker 独立认领、重试和完成任务。PostgreSQL 使用行锁与 `SKIP LOCKED` 支持多 worker 并发认领。
 默认在 Web 进程内嵌一个 worker；`TASK_QUEUE_ENABLED=false` 可回退到直接执行。
 可用性 SLO 和可重现负载门禁见 [AVAILABILITY.md](AVAILABILITY.md)。
 
 ---
 
-## 10. v0.1 不解决的开放点
+## 10. 后续开放点
 
 - ERP / WMS 真实对接
-- 多租户隔离的鉴权设计
-- 跨批次联合优化（v1.5）
-- 报告自动定时生成与分发
+- JWT/OIDC 与 RBAC
+- Prometheus/trace 导出与多实例运行告警
 - 工单实绩驱动的模型反向校准

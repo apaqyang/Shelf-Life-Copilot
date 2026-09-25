@@ -41,6 +41,10 @@ class TestDefaults:
         assert s.api_token is None
         assert s.webhook_replay_window_seconds == 300
         assert s.decisions_db_path == Path("data/decisions.db")
+        assert s.persistence_backend == "sqlite"
+        assert s.postgres_dsn is None
+        assert s.postgres_pool_min_size == 1
+        assert s.postgres_pool_max_size == 10
         assert s.reports_output_dir == Path("docs/demo_samples")
         assert s.scan_customers_list == ["customerA", "customerB"]
         assert s.scan_hour == 7
@@ -172,6 +176,18 @@ class TestValidation:
     def test_non_positive_worker_poll_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("TASK_WORKER_POLL_SECONDS", "0")
         with pytest.raises(ValueError, match="poll interval"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_postgres_requires_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PERSISTENCE_BACKEND", "postgres")
+        monkeypatch.delenv("POSTGRES_DSN", raising=False)
+        with pytest.raises(ValueError, match="POSTGRES_DSN"):
+            Settings(_env_file=None)  # type: ignore[call-arg]
+
+    def test_postgres_pool_bounds_are_ordered(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("POSTGRES_POOL_MIN_SIZE", "5")
+        monkeypatch.setenv("POSTGRES_POOL_MAX_SIZE", "2")
+        with pytest.raises(ValueError, match="must not exceed"):
             Settings(_env_file=None)  # type: ignore[call-arg]
 
 

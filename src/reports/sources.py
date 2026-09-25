@@ -17,10 +17,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from src.models import Decision
-from src.persistence import DecisionStore
+from src.persistence import DecisionRepository, DecisionStore
 
 _MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
-_BUSINESS_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 
 def _parse_month(month: str) -> tuple[int, int]:
@@ -35,16 +34,30 @@ def load_decisions_from_sqlite(
     db_path: Path | str,
     customer_id: str,
     month: str,
+    *,
+    timezone: str = "Asia/Shanghai",
 ) -> list[Decision]:
     """Read all decisions for `customer_id` whose `decided_at` falls in `month`.
 
-    Window is [start_of_month, start_of_next_month) in the Asia/Shanghai
-    business calendar. Year-wraps correctly for December → January.
+    Window is [start_of_month, start_of_next_month) in the configured business
+    calendar. Year-wraps correctly for December → January.
     """
+    with DecisionStore(db_path) as store:
+        return load_decisions(store, customer_id, month, timezone=timezone)
+
+
+def load_decisions(
+    repository: DecisionRepository,
+    customer_id: str,
+    month: str,
+    *,
+    timezone: str = "Asia/Shanghai",
+) -> list[Decision]:
+    """Load one tenant/month through a vendor-neutral decision repository."""
     year, mo = _parse_month(month)
-    start = datetime(year, mo, 1, tzinfo=_BUSINESS_TIMEZONE)
+    business_timezone = ZoneInfo(timezone)
+    start = datetime(year, mo, 1, tzinfo=business_timezone)
     end_year = year + (1 if mo == 12 else 0)
     end_mo = 1 if mo == 12 else mo + 1
-    end = datetime(end_year, end_mo, 1, tzinfo=_BUSINESS_TIMEZONE)
-    with DecisionStore(db_path) as store:
-        return store.list_for_period(customer_id, start, end)
+    end = datetime(end_year, end_mo, 1, tzinfo=business_timezone)
+    return repository.list_for_period(customer_id, start, end)

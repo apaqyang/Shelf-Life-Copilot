@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from uuid import NAMESPACE_URL, uuid5
 
 from src.models import ActionType, Decision, DecisionOutcome, WorkOrder
-from src.persistence import DecisionRepository, RevisionStore, SuggestionRepository
+from src.persistence import DecisionRepository, RevisionRepository, SuggestionRepository
 from src.repository import BatchRepository, get_repository
 from src.webhook.schemas import WecomEvent
 
@@ -54,7 +54,7 @@ def handle_click(
     store: DecisionRepository,
     suggestion_store: SuggestionRepository | None = None,
     repository: BatchRepository | None = None,
-    revision_store: RevisionStore | None = None,
+    revision_store: RevisionRepository | None = None,
 ) -> str:
     """Route a click event to the right side effect, return a short status line.
 

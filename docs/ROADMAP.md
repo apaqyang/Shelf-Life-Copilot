@@ -2,7 +2,7 @@
 
 > 文档性质：公开工程规划
 > 当前基线：v0.1
-> 更新日期：2026-09-23
+> 更新日期：2026-09-24
 > 配套文档：[ARCHITECTURE.md](ARCHITECTURE.md) · [TECH_SPEC.md](TECH_SPEC.md) · [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md)
 
 本文档回答两个问题：项目下一步向哪里演进，以及演进后的系统边界应该是什么。当前代码结构与依赖方向以 `ARCHITECTURE.md` 为准，可执行任务以 `DEVELOPMENT_TASKS.md` 为准。
@@ -16,7 +16,7 @@
 - JSON 批次与客户配置加载，并提供 `BatchRepository` 插件边界。
 - 临期阈值分级、LLM 建议生成、越界动作标记和卡片渲染。
 - Anthropic、Moonshot 和零配置 offline provider。
-- 每日扫描、每月报告调度，统一使用 `Asia/Shanghai` 业务时区。
+- 每日扫描、每月报告调度，按租户配置 IANA 业务时区。
 - SQLite 决策与建议日志、PDF 月报、企微群机器人推送。
 - FastAPI 生命周期管理、企微点击回调骨架、企业插件加载机制。
 - Python 3.11/3.12 CI，核心测试保持 100% 语句和分支覆盖。
@@ -108,7 +108,7 @@ monthly aggregation -> PDF/summary -> delivery
 - 定时任务、推送、回调和插件加载有自动测试。
 - 核心模块语句和分支覆盖率为 100%。
 
-### M1 · 单租户生产加固
+### M1 · 单租户生产加固（已完成）
 
 目标：让单个客户的私有化部署具备可恢复、可观测和可升级能力。
 
@@ -119,7 +119,7 @@ monthly aggregation -> PDF/summary -> delivery
 - 扫描、推送和报告有结构化日志、correlation ID 和最小运行指标。
 - 备份恢复、密钥轮换和版本回滚有可验证的运维步骤。
 
-### M2 · 决策闭环
+### M2 · 决策闭环（已完成）
 
 目标：从“提醒 + 建议”演进到“决策 + 工单 + 回执 + 复盘”。
 
@@ -130,7 +130,7 @@ monthly aggregation -> PDF/summary -> delivery
 - 完成回执可记录实际数量和实际节省，不覆盖原始估算。
 - 月报可区分估算、已执行与已核实数据。
 
-### M3 · 集成与多租户
+### M3 · 集成与多租户（进行中）
 
 目标：在不改变领域层的前提下接入真实 ERP，并支持多客户管理。
 
@@ -141,7 +141,7 @@ monthly aggregation -> PDF/summary -> delivery
 - PostgreSQL 适配器通过与 SQLite 相同的持久化契约测试。
 - 任务调度、日志、指标和数据查询均可按租户隔离。
 
-### M4 · 规模化与优化
+### M4 · 规模化与优化（进行中）
 
 目标：在有足够真实决策数据后，提升吞吐、成本与建议质量。
 
@@ -158,10 +158,12 @@ monthly aggregation -> PDF/summary -> delivery
 
 ### 5.1 SQLite 到 PostgreSQL
 
-1. 先为 Decision/Suggestion 存储定义 protocol 和共享契约测试。
-2. 引入 SQLite schema version，保持现有用法不变。
-3. 实现 PostgreSQL adapter，运行同一套契约测试。
-4. 在组装层通过配置选择 adapter，最后再做数据迁移。
+1. ✅ 为所有持久化边界定义 protocol 和可替换 adapter。
+2. ✅ 引入 SQLite schema version，保持现有用法不变。
+3. ✅ 实现 PostgreSQL 全边界 adapter 和并发任务认领。
+4. ✅ 在组装层显式选择后端，并由 lifespan 管理连接池。
+5. ✅ 将多实例幂等认领和限流配额收敛到 PostgreSQL 共享边界。
+6. 客户切换时按运维手册执行备份、历史数据导入和回滚验收。
 
 ### 5.2 明文回调到生产回调
 

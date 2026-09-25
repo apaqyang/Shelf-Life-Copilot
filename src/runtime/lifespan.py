@@ -22,17 +22,32 @@ from fastapi import FastAPI
 from src.observability import log_event, metrics
 from src.optimization import default_evaluation_cases, evaluate_optimizer
 from src.persistence import (
+    DecisionRepository,
     DecisionStore,
+    IdempotencyRepository,
     IdempotencyStore,
+    OptimizationPlanRepository,
     OptimizationPlanStore,
+    PostgresDatabase,
+    PostgresDecisionStore,
+    PostgresIdempotencyStore,
+    PostgresOptimizationPlanStore,
+    PostgresRateLimiter,
+    PostgresRevisionStore,
+    PostgresSuggestionStore,
+    PostgresWorkOrderStore,
+    RevisionRepository,
     RevisionStore,
+    SuggestionRepository,
     SuggestionStore,
+    WorkOrderRepository,
     WorkOrderStore,
 )
 from src.plugins import PluginRegistry, load_plugins
 from src.reports import ReportRunResult
 from src.repository import get_repository
 from src.runtime.config import Settings
+from src.runtime.security import SlidingWindowRateLimiter
 from src.scheduler import (
     DailyScheduler,
     MonthlyReportScheduler,
@@ -49,7 +64,7 @@ from src.suggestion import (
     build_moonshot_provider,
     build_offline_provider,
 )
-from src.task_queue import DurableTaskQueue, TaskWorker
+from src.task_queue import DurableTaskQueue, PostgresTaskQueue, TaskWorker
 from src.webhook import require_secure_webhook_crypto
 from src.wecom import (
     DryRunWecomClient,
@@ -183,12 +198,45 @@ def build_lifespan(
             logger.info("Pure open-source mode (no enterprise plugins).")
 
         wecom_client = _build_wecom_client(settings)
-        decision_store = DecisionStore(settings.decisions_db_path)
-        suggestion_store = SuggestionStore(settings.decisions_db_path)
-        work_order_store = WorkOrderStore(settings.decisions_db_path)
-        idempotency_store = IdempotencyStore(settings.decisions_db_path)
-        revision_store = RevisionStore(settings.decisions_db_path)
-        optimization_plan_store = OptimizationPlanStore(settings.decisions_db_path)
+        postgres_database: PostgresDatabase | None = None
+        decision_store: DecisionRepository
+        suggestion_store: SuggestionRepository
+        work_order_store: WorkOrderRepository
+        idempotency_store: IdempotencyRepository
+        revision_store: RevisionRepository
+        optimization_plan_store: OptimizationPlanRepository
+        task_queue: DurableTaskQueue | PostgresTaskQueue
+        if settings.persistence_backend == "postgres":
+            assert settings.postgres_dsn is not None  # noqa: S101 - settings validation
+            postgres_database = PostgresDatabase.from_dsn(
+                settings.postgres_dsn.get_secret_value(),
+                min_size=settings.postgres_pool_min_size,
+                max_size=settings.postgres_pool_max_size,
+            )
+            decision_store = PostgresDecisionStore(postgres_database)
+            suggestion_store = PostgresSuggestionStore(postgres_database)
+            work_order_store = PostgresWorkOrderStore(postgres_database)
+            idempotency_store = PostgresIdempotencyStore(postgres_database)
+            revision_store = PostgresRevisionStore(postgres_database)
+            optimization_plan_store = PostgresOptimizationPlanStore(postgres_database)
+            task_queue = PostgresTaskQueue(postgres_database)
+            app.state.rate_limiter = PostgresRateLimiter(
+                postgres_database,
+                limit=settings.rate_limit_requests,
+                window_seconds=settings.rate_limit_window_seconds,
+            )
+        else:
+            decision_store = DecisionStore(settings.decisions_db_path)
+            suggestion_store = SuggestionStore(settings.decisions_db_path)
+            work_order_store = WorkOrderStore(settings.decisions_db_path)
+            idempotency_store = IdempotencyStore(settings.decisions_db_path)
+            revision_store = RevisionStore(settings.decisions_db_path)
+            optimization_plan_store = OptimizationPlanStore(settings.decisions_db_path)
+            task_queue = DurableTaskQueue(settings.decisions_db_path)
+            app.state.rate_limiter = SlidingWindowRateLimiter(
+                limit=settings.rate_limit_requests,
+                window_seconds=settings.rate_limit_window_seconds,
+            )
         app.state.decision_store = decision_store
         app.state.suggestion_store = suggestion_store
         app.state.work_order_store = work_order_store
@@ -199,9 +247,17 @@ def build_lifespan(
 
         batch_repository = get_repository()
         app.state.batch_repository = batch_repository
-        baselines = settings.customer_baselines or {
-            customer_id: batch_repository.load_customer_config(customer_id).annual_baseline_loss
+        customer_configs = {
+            customer_id: batch_repository.load_customer_config(customer_id)
             for customer_id in settings.scan_customers_list
+        }
+        baselines = settings.customer_baselines or {
+            customer_id: config.annual_baseline_loss
+            for customer_id, config in customer_configs.items()
+        }
+        customer_timezones = {
+            customer_id: config.business_timezone
+            for customer_id, config in customer_configs.items()
         }
         monthly = MonthlyReportScheduler(
             db_path=settings.decisions_db_path,
@@ -210,12 +266,14 @@ def build_lifespan(
             day=settings.monthly_day,
             hour=settings.monthly_hour,
             minute=settings.monthly_minute,
+            customer_timezones=customer_timezones,
+            decision_repository=decision_store,
             on_result=build_monthly_callback(wecom_client),
         )
         monthly.start()
         app.state.monthly_scheduler = monthly
         logger.info(
-            "MonthlyReportScheduler started: day=%d %02d:%02d Asia/Shanghai",
+            "MonthlyReportScheduler started: day=%d %02d:%02d in tenant business timezones",
             settings.monthly_day,
             settings.monthly_hour,
             settings.monthly_minute,
@@ -230,7 +288,6 @@ def build_lifespan(
             repository=batch_repository,
         )
         app.state.scan_runner = runner
-        task_queue = DurableTaskQueue(settings.decisions_db_path)
         app.state.task_queue = task_queue
         task_worker: TaskWorker | None = None
         if provider is None:
@@ -256,6 +313,7 @@ def build_lifespan(
                 customer_ids=settings.scan_customers_list,
                 hour=settings.scan_hour,
                 minute=settings.scan_minute,
+                customer_timezones=customer_timezones,
                 on_result=None if settings.task_queue_enabled else callback,
                 task_queue=task_queue if settings.task_queue_enabled else None,
             )
@@ -284,6 +342,8 @@ def build_lifespan(
             work_order_store.close()
             suggestion_store.close()
             decision_store.close()
+            if postgres_database is not None:
+                postgres_database.close()
             logger.info("Schedulers shut down cleanly.")
 
     return _lifespan

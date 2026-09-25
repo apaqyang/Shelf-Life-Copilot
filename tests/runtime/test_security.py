@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Protocol
+
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
@@ -22,9 +24,15 @@ def test_sliding_window_expires_old_requests() -> None:
     assert limiter.allow("other-client")
 
 
-def _guarded_app(*, token: str | None = "secret") -> FastAPI:
+class _Limiter(Protocol):
+    def allow(self, key: str, *, now: float | None = None) -> bool: ...
+
+
+def _guarded_app(*, token: str | None = "secret", limiter: _Limiter | None = None) -> FastAPI:
     app = FastAPI()
     app.state.settings = Settings(_env_file=None, api_token=token)  # type: ignore[call-arg]
+    if limiter is not None:
+        app.state.rate_limiter = limiter
     app.add_middleware(
         RequestGuardMiddleware,
         max_body_bytes=16,
@@ -84,3 +92,28 @@ def test_invalid_content_length_is_rejected() -> None:
             headers={"Authorization": "Bearer secret", "content-length": "invalid"},
         )
     assert response.status_code == 400
+
+
+def test_two_app_instances_use_one_shared_rate_limit_quota() -> None:
+    shared = SlidingWindowRateLimiter(limit=2, window_seconds=60)
+    first = _guarded_app(limiter=shared)
+    second = _guarded_app(limiter=shared)
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(first) as first_client, TestClient(second) as second_client:
+        assert first_client.post("/api/test", headers=headers).status_code == 200
+        assert second_client.post("/api/test", headers=headers).status_code == 200
+        assert first_client.post("/api/test", headers=headers).status_code == 429
+
+
+def test_shared_rate_limit_backend_failure_is_fail_closed() -> None:
+    class BrokenLimiter:
+        def allow(self, key: str, *, now: float | None = None) -> bool:
+            raise RuntimeError("database unavailable")
+
+    with TestClient(_guarded_app(limiter=BrokenLimiter())) as client:
+        response = client.post(
+            "/api/test",
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "rate limit backend unavailable"}

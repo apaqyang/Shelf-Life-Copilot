@@ -88,6 +88,22 @@ class TestLoadFromSqlite:
         result = load_decisions_from_sqlite(db_file, "customerA", "2026-12")
         assert [d.batch_id for d in result] == ["dec-31"]
 
+    def test_uses_configured_business_timezone_for_month_boundary(self, tmp_path: Path) -> None:
+        db_file = tmp_path / "d.db"
+        store = DecisionStore(db_file)
+        store.save(
+            _decision(batch_id="la-april", decided_at=datetime(2026, 5, 1, 6, 30, tzinfo=UTC))
+        )
+        store.save(_decision(batch_id="la-may", decided_at=datetime(2026, 5, 1, 7, 0, tzinfo=UTC)))
+
+        result = load_decisions_from_sqlite(
+            db_file,
+            "customerA",
+            "2026-05",
+            timezone="America/Los_Angeles",
+        )
+        assert [d.batch_id for d in result] == ["la-may"]
+
     def test_invalid_month_format_raises(self, tmp_path: Path) -> None:
         db_file = tmp_path / "d.db"
         DecisionStore(db_file)

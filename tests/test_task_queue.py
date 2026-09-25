@@ -4,8 +4,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.persistence.postgres import PostgresDatabase
 from src.scheduler import ScanResult, ScanRunner
-from src.task_queue import DurableTaskQueue, TaskStatus, TaskWorker
+from src.task_queue import (
+    DurableTaskQueue,
+    PostgresTaskQueue,
+    QueuedTask,
+    TaskStatus,
+    TaskWorker,
+)
+from tests.persistence.test_postgres_extended import FakeConnection, FakePool
 
 
 def test_queue_is_durable_deduplicated_and_stateful(tmp_path: object) -> None:
@@ -124,3 +132,58 @@ async def test_worker_run_loops_after_completed_work(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(worker, "run_once", run_once)
     await worker.run()
     assert calls == 2
+
+
+def _postgres_queue() -> tuple[PostgresTaskQueue, FakeConnection]:
+    connection = FakeConnection()
+    database = object.__new__(PostgresDatabase)
+    database._pool = FakePool(connection)
+    return PostgresTaskQueue(database), connection
+
+
+def test_postgres_queue_enqueue_and_claim_paths() -> None:
+    queue, connection = _postgres_queue()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        queue.enqueue("scan", "tenant", dedupe_key="bad", now=datetime(2026, 1, 1))
+    connection.the_cursor.fetchone_values.append(("created",))
+    task_id, created = queue.enqueue("scan", "tenant", dedupe_key="new", now=now)
+    assert created and task_id
+    connection.the_cursor.fetchone_values.extend([None, ("existing",)])
+    assert queue.enqueue("scan", "tenant", dedupe_key="same", now=now) == (
+        "existing",
+        False,
+    )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        queue.claim(now=datetime(2026, 1, 1))
+    with pytest.raises(ValueError, match="visibility timeout"):
+        queue.claim(now=now, visibility_timeout_seconds=0)
+    connection.the_cursor.fetchone_values.append(None)
+    assert queue.claim(now=now) is None
+    connection.the_cursor.fetchone_values.append(("task", "scan", "tenant", {"x": 1}, "pending", 0))
+    task = queue.claim(now=now)
+    assert task is not None and task.payload == {"x": 1} and task.attempts == 1
+
+
+def test_postgres_queue_completion_failure_and_counts() -> None:
+    queue, connection = _postgres_queue()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    queue.complete("task", now=now)
+    connection.the_cursor.rowcount = 0
+    with pytest.raises(ValueError, match="not running"):
+        queue.complete("task", now=now)
+    connection.the_cursor.rowcount = 1
+    task = QueuedTask(
+        task_id="task",
+        task_kind="scan",
+        customer_id="tenant",
+        payload={},
+        status=TaskStatus.RUNNING,
+        attempts=1,
+    )
+    queue.fail(task, "retry", max_attempts=2, now=now)
+    terminal = task.model_copy(update={"attempts": 2})
+    queue.fail(terminal, "terminal", max_attempts=2, now=now)
+    connection.the_cursor.fetchall_value = [("pending", 1), ("failed", 1)]
+    assert queue.counts() == {"pending": 1, "failed": 1}
+    queue.close()

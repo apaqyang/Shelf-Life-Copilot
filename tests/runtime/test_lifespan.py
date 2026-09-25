@@ -14,9 +14,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
+from src.persistence import PostgresDatabase, PostgresDecisionStore, PostgresRateLimiter
 from src.runtime.config import Settings
 from src.runtime.lifespan import build_lifespan
+from tests.persistence.test_postgres_extended import FakePool
 
 
 @pytest.fixture
@@ -83,7 +86,7 @@ class TestLifespanWithoutLlmKey:
         seen_jobs: list[str] = []
         for _ in _make_client(app):
             seen_jobs = app.state.monthly_scheduler.job_ids
-        assert seen_jobs == ["monthly-report"]
+        assert seen_jobs == ["monthly-report-customerA", "monthly-report-customerB"]
         # After context exit, shutdown() has been called; job removal is APScheduler's
         # contract and we don't re-assert it here.
 
@@ -136,6 +139,41 @@ class TestLifespanWithoutLlmKey:
         for _ in _make_client(app):
             assert app.state.settings is settings
         reset_webhook_crypto()
+
+    def test_postgres_backend_uses_one_application_owned_pool(
+        self,
+        base_settings: Settings,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        pool = FakePool()
+        database = object.__new__(PostgresDatabase)
+        database._pool = pool
+
+        def fake_from_dsn(
+            cls: type[PostgresDatabase],
+            dsn: str,
+            *,
+            min_size: int,
+            max_size: int,
+        ) -> PostgresDatabase:
+            assert cls is PostgresDatabase
+            assert dsn == "postgresql://db"
+            assert (min_size, max_size) == (1, 10)
+            return database
+
+        monkeypatch.setattr(PostgresDatabase, "from_dsn", classmethod(fake_from_dsn))
+        settings = base_settings.model_copy(
+            update={
+                "persistence_backend": "postgres",
+                "postgres_dsn": SecretStr("postgresql://db"),
+                "task_queue_enabled": False,
+            }
+        )
+        app = FastAPI(lifespan=build_lifespan(settings))
+        for _ in _make_client(app):
+            assert isinstance(app.state.decision_store, PostgresDecisionStore)
+            assert isinstance(app.state.rate_limiter, PostgresRateLimiter)
+        assert pool.closed
 
 
 class TestLifespanWithLlmKey:

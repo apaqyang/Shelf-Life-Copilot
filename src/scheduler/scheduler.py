@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
@@ -46,6 +46,7 @@ class DailyScheduler:
         hour: int = 7,
         minute: int = 0,
         timezone: str = "Asia/Shanghai",
+        customer_timezones: Mapping[str, str] | None = None,
         on_result: ScanResultCallback | None = None,
         task_queue: TaskPublisher | None = None,
     ) -> None:
@@ -60,7 +61,11 @@ class DailyScheduler:
         self._customer_ids = customer_ids
         self._hour = hour
         self._minute = minute
-        self._timezone = timezone
+        configured_timezones = customer_timezones or {}
+        self._timezones = {
+            customer_id: str(ZoneInfo(configured_timezones.get(customer_id, timezone)))
+            for customer_id in customer_ids
+        }
         self._on_result = on_result
         self._task_queue = task_queue
         self._scheduler = AsyncIOScheduler()
@@ -73,7 +78,7 @@ class DailyScheduler:
                 trigger=CronTrigger(
                     hour=self._hour,
                     minute=self._minute,
-                    timezone=self._timezone,
+                    timezone=self._timezones[customer_id],
                 ),
                 args=[customer_id],
                 id=f"scan-{customer_id}",
@@ -82,7 +87,7 @@ class DailyScheduler:
 
     async def _run_one_customer(self, customer_id: str) -> None:
         if self._task_queue is not None:
-            business_date = datetime.now(ZoneInfo(self._timezone)).date().isoformat()
+            business_date = datetime.now(ZoneInfo(self._timezones[customer_id])).date().isoformat()
             self._task_queue.enqueue(
                 "scan",
                 customer_id,

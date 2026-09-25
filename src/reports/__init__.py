@@ -19,7 +19,7 @@ from src.reports.runner import (
     previous_month,
     run_monthly_reports,
 )
-from src.reports.sources import load_decisions_from_sqlite
+from src.reports.sources import load_decisions, load_decisions_from_sqlite
 
 __all__ = [
     "ActionTally",
@@ -27,6 +27,7 @@ __all__ = [
     "ReportRunResult",
     "aggregate_monthly_report",
     "load_decisions_from_sqlite",
+    "load_decisions",
     "previous_month",
     "render_monthly_report_pdf",
     "run_monthly_reports",

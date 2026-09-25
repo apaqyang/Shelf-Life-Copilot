@@ -1,20 +1,31 @@
-"""Authentication, request-size, and in-process rate-limit controls."""
+"""Authentication, request-size, and pluggable rate-limit controls."""
 
 from __future__ import annotations
 
 import hmac
+import logging
 import time
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
 from threading import Lock
+from typing import Protocol, cast
 
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
+from src.observability import metrics
 from src.runtime.config import Settings
 from src.runtime.tenant import Principal
+
+logger = logging.getLogger(__name__)
+
+
+class RateLimiter(Protocol):
+    """Request-rate boundary implemented locally or by shared persistence."""
+
+    def allow(self, key: str, *, now: float | None = None) -> bool: ...  # pragma: no cover
 
 
 class SlidingWindowRateLimiter:
@@ -79,7 +90,23 @@ class RequestGuardMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=413, content={"detail": "request body too large"})
 
         client = request.client.host if request.client is not None else "unknown"
-        if not self._limiter.allow(f"{client}:{request.url.path}"):
+        limiter = cast(
+            RateLimiter,
+            getattr(request.app.state, "rate_limiter", self._limiter),
+        )
+        try:
+            allowed = limiter.allow(f"{client}:{request.url.path}")
+        except Exception as exc:
+            metrics.increment("rate_limit_backend_failure_total")
+            logger.warning(
+                "rate_limit.backend_unavailable",
+                extra={"path": request.url.path, "error_type": type(exc).__name__},
+            )
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "rate limit backend unavailable"},
+            )
+        if not allowed:
             return JSONResponse(status_code=429, content={"detail": "rate limit exceeded"})
         return await call_next(request)
 

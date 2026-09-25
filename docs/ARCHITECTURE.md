@@ -309,11 +309,11 @@ tests/
 | 真实 ERP / WMS 对接 | 开源核心提供 `BatchRepository` 插件边界 | SAP / 用友 / 金蝶适配器作为企业插件部署 |
 | 企微卡片渲染 | ✅ `src/wecom/cards.py`（4 模板，纯函数） | — |
 | 企微真实推送 | ✅ 群机器人 webhook | 交互式应用消息由企业插件提供 |
-| 决策与工单持久化 | ✅ SQLite + PostgreSQL adapters，同意决策与工单原子写入 | PostgreSQL 连接池装配 |
+| 决策与工单持久化 | ✅ SQLite/PostgreSQL 全边界 adapters，运行时显式选择且 PostgreSQL 使用连接池 | 管理式 PostgreSQL 托管 |
 | 改方案对话 | ✅ 单轮，会话与原建议可靠关联并审计 | 保持单轮边界 |
-| 月度 PDF 报告 | ✅ `src/reports/`（reportlab + STSong-Light CID 中文） | 接持久化决策日志驱动数据源 + 定时触发 |
+| 月度 PDF 报告 | ✅ 持久化决策日志驱动 + 按租户时区定时生成/分发 | 多实例任务协调 |
 | 命令接口鉴权 | ✅ Bearer principal 到允许客户集合的映射 | JWT / RBAC |
-| 回调防重放 | ✅ 时间窗校验 + SQLite 幂等记录 | 多实例共享存储 |
+| 回调防重放 | ✅ 时间窗校验 + SQLite/PostgreSQL 幂等记录；PostgreSQL 原子认领支持多实例 | 幂等记录保留策略 |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
 
 ---
@@ -326,10 +326,10 @@ tests/
 | 配置（API key 等） | `pydantic-settings` 从环境变量加载并校验 | 外部 secrets manager |
 | 错误处理 | per-batch try/except，ScanError 留痕 | + retry policy（指数退避） |
 | 并发 | LLM 有界并发且结果顺序稳定；SQLite WAL + 初始化/连接锁 | 多实例任务队列 |
-| 时区 | 持久化统一 UTC，调度/月报按 `Asia/Shanghai` 业务日历 | 按租户配置业务时区 |
-| 数据库生命周期 | FastAPI lifespan 拥有长连接；SQLite/PostgreSQL adapters | PostgreSQL 连接池装配 |
+| 时区 | 持久化统一 UTC，扫描/月报按租户 IANA 业务时区 | 按租户配置独立执行时间 |
+| 数据库生命周期 | FastAPI lifespan 拥有 SQLite 连接或 PostgreSQL 连接池；关闭时统一释放 | 托管平台连接代理 |
 | 指标 | `/metrics` 暴露扫描、LLM、推送、回调和报告计数/耗时 | Prometheus exporter |
-| 接口安全 | 生产环境安全回调加密；Bearer auth；body/rate limit；持久化幂等 | 分布式限流与密钥轮换 |
+| 接口安全 | 生产环境安全回调加密；Bearer auth；body limit；PostgreSQL 共享限流与幂等 | JWT/RBAC 与密钥轮换 |
 
 ---
 

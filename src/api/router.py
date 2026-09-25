@@ -30,7 +30,11 @@ from src.optimization import (
     OptimizationRequest,
     priority_baseline,
 )
-from src.persistence import IdempotencyStore, OptimizationPlanStore, WorkOrderStore
+from src.persistence import (
+    IdempotencyRepository,
+    OptimizationPlanRepository,
+    WorkOrderRepository,
+)
 from src.runtime.security import require_api_token
 from src.runtime.tenant import Principal
 from src.scheduler import ScanRunner
@@ -88,20 +92,20 @@ async def list_work_orders(
     return WorkOrderListResponse(items=items, page=_page(items, cursor, limit))
 
 
-def _idempotency_store(request: Request) -> IdempotencyStore:
-    return cast(IdempotencyStore, request.app.state.idempotency_store)
+def _idempotency_store(request: Request) -> IdempotencyRepository:
+    return cast(IdempotencyRepository, request.app.state.idempotency_store)
 
 
 def _scan_runner(request: Request) -> ScanRunner:
     return cast(ScanRunner, request.app.state.scan_runner)
 
 
-def _work_order_store(request: Request) -> WorkOrderStore:
-    return cast(WorkOrderStore, request.app.state.work_order_store)
+def _work_order_store(request: Request) -> WorkOrderRepository:
+    return cast(WorkOrderRepository, request.app.state.work_order_store)
 
 
-def _optimization_store(request: Request) -> OptimizationPlanStore:
-    return cast(OptimizationPlanStore, request.app.state.optimization_plan_store)
+def _optimization_store(request: Request) -> OptimizationPlanRepository:
+    return cast(OptimizationPlanRepository, request.app.state.optimization_plan_store)
 
 
 @router.post("/optimization-plans", response_model=OptimizationPlanResponse)
@@ -182,7 +186,7 @@ async def execute_optimization_plan(
 
 
 def _claim_or_replay(
-    store: IdempotencyStore,
+    store: IdempotencyRepository,
     key: str,
     kind: str,
     response_type: type[ManualScanResponse] | type[WorkOrderCompletionResponse],
