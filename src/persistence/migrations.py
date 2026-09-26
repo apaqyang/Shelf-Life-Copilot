@@ -199,6 +199,32 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
             """,
         ),
     ),
+    Migration(
+        version=8,
+        name="security_audit_archive",
+        statements=(
+            """
+            CREATE TABLE security_audit_events (
+                event_id     TEXT PRIMARY KEY,
+                occurred_at  TEXT NOT NULL,
+                event_type   TEXT NOT NULL,
+                subject      TEXT NOT NULL,
+                reason       TEXT NOT NULL,
+                path         TEXT NOT NULL,
+                customer_id  TEXT,
+                trace_id     TEXT
+            )
+            """,
+            """
+            CREATE INDEX idx_security_audit_period
+                ON security_audit_events(occurred_at DESC)
+            """,
+            """
+            CREATE INDEX idx_security_audit_customer_period
+                ON security_audit_events(customer_id, occurred_at DESC)
+            """,
+        ),
+    ),
 )
 
 LATEST_SCHEMA_VERSION: Final[int] = MIGRATIONS[-1].version

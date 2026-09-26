@@ -62,6 +62,7 @@ class TestDefaults:
         assert s.task_worker_max_attempts == 3
         assert s.task_worker_poll_seconds == 0.2
         assert s.task_visibility_timeout_seconds == 300
+        assert s.security_audit_retention_days == 365
         assert s.api_token_customer_ids == frozenset({"customerA", "customerB"})
 
 

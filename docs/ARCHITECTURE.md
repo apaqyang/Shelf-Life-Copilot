@@ -312,7 +312,7 @@ tests/
 | 决策与工单持久化 | ✅ SQLite/PostgreSQL 全边界 adapters，运行时显式选择且 PostgreSQL 使用连接池 | 管理式 PostgreSQL 托管 |
 | 改方案对话 | ✅ 单轮，会话与原建议可靠关联并审计 | 保持单轮边界 |
 | 月度 PDF 报告 | ✅ 持久化决策日志驱动 + 按租户时区定时生成/分发 | 多实例任务协调 |
-| 命令接口鉴权 | ✅ 静态 Bearer 兼容模式 + OIDC JWT/JWKS + viewer/operator/admin RBAC | 细粒度策略引擎 |
+| 命令接口鉴权 | ✅ 静态 Bearer 兼容模式 + OIDC JWT/JWKS + viewer/operator/admin RBAC；拒绝事件持久审计、租户隔离查询与保留期清理 | 细粒度策略引擎 |
 | 回调防重放 | ✅ 时间窗校验 + SQLite/PostgreSQL 幂等记录；PostgreSQL 原子认领支持多实例 | 幂等记录保留策略 |
 | Prompt caching | ❌（每次完整发送） | v0.5 评估收益 |
 
@@ -322,14 +322,14 @@ tests/
 
 | 关注点 | v0.1 实现 | 演进方向 |
 |---|---|---|
-| 日志 | 统一事件字段：customer/correlation/result/duration；OTLP trace export | 集中审计归档 |
+| 日志 | 统一事件字段：customer/correlation/result/duration；OTLP trace export；SQLite/PostgreSQL 安全审计归档 | 外部不可变冷归档 |
 | 配置（API key 等） | `pydantic-settings` 从环境变量加载并校验 | 外部 secrets manager |
 | 错误处理 | per-batch try/except，ScanError 留痕 | + retry policy（指数退避） |
 | 并发 | LLM 有界并发；SQLite WAL；PostgreSQL `SKIP LOCKED` 多 worker 任务队列 | 独立 worker 自动扩缩容 |
 | 时区 | 持久化统一 UTC，扫描/月报按租户 IANA 业务时区 | 按租户配置独立执行时间 |
 | 数据库生命周期 | FastAPI lifespan 拥有 SQLite 连接或 PostgreSQL 连接池；关闭时统一释放 | 托管平台连接代理 |
 | 指标 | `/metrics` Prometheus exposition；W3C trace context；可选 OTLP exporter | 多实例 SLO 告警规则 |
-| 接口安全 | 生产回调加密；OIDC/RBAC；body limit；PostgreSQL 共享限流与幂等 | 审计归档与细粒度策略 |
+| 接口安全 | 生产回调加密；OIDC/RBAC；body limit；PostgreSQL 共享限流与幂等；审计归档 | 细粒度策略 |
 
 ---
 

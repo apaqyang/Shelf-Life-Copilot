@@ -16,6 +16,7 @@ import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
 
@@ -34,10 +35,13 @@ from src.persistence import (
     PostgresOptimizationPlanStore,
     PostgresRateLimiter,
     PostgresRevisionStore,
+    PostgresSecurityAuditStore,
     PostgresSuggestionStore,
     PostgresWorkOrderStore,
     RevisionRepository,
     RevisionStore,
+    SecurityAuditRepository,
+    SecurityAuditStore,
     SuggestionRepository,
     SuggestionStore,
     WorkOrderRepository,
@@ -214,6 +218,7 @@ def build_lifespan(
         idempotency_store: IdempotencyRepository
         revision_store: RevisionRepository
         optimization_plan_store: OptimizationPlanRepository
+        security_audit_store: SecurityAuditRepository
         task_queue: DurableTaskQueue | PostgresTaskQueue
         if settings.persistence_backend == "postgres":
             assert settings.postgres_dsn is not None  # noqa: S101 - settings validation
@@ -228,6 +233,7 @@ def build_lifespan(
             idempotency_store = PostgresIdempotencyStore(postgres_database)
             revision_store = PostgresRevisionStore(postgres_database)
             optimization_plan_store = PostgresOptimizationPlanStore(postgres_database)
+            security_audit_store = PostgresSecurityAuditStore(postgres_database)
             task_queue = PostgresTaskQueue(postgres_database)
             app.state.rate_limiter = PostgresRateLimiter(
                 postgres_database,
@@ -241,6 +247,7 @@ def build_lifespan(
             idempotency_store = IdempotencyStore(settings.decisions_db_path)
             revision_store = RevisionStore(settings.decisions_db_path)
             optimization_plan_store = OptimizationPlanStore(settings.decisions_db_path)
+            security_audit_store = SecurityAuditStore(settings.decisions_db_path)
             task_queue = DurableTaskQueue(settings.decisions_db_path)
             app.state.rate_limiter = SlidingWindowRateLimiter(
                 limit=settings.rate_limit_requests,
@@ -252,6 +259,12 @@ def build_lifespan(
         app.state.idempotency_store = idempotency_store
         app.state.revision_store = revision_store
         app.state.optimization_plan_store = optimization_plan_store
+        app.state.security_audit_store = security_audit_store
+        purged_audit_events = security_audit_store.purge_before(
+            datetime.now(UTC) - timedelta(days=settings.security_audit_retention_days)
+        )
+        if purged_audit_events:
+            metrics.increment("security_audit_purged_total", purged_audit_events)
         app.state.optimization_gate = evaluate_optimizer(default_evaluation_cases())
 
         config_repository = get_repository()
@@ -376,6 +389,7 @@ def build_lifespan(
             task_queue.close()
             idempotency_store.close()
             optimization_plan_store.close()
+            security_audit_store.close()
             revision_store.close()
             work_order_store.close()
             suggestion_store.close()

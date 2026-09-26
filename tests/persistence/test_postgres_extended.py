@@ -16,12 +16,14 @@ from src.optimization import (
     OptimizationRequest,
     priority_baseline,
 )
+from src.persistence import SecurityAuditEvent
 from src.persistence.postgres import (
     PostgresDatabase,
     PostgresIdempotencyStore,
     PostgresOptimizationPlanStore,
     PostgresRateLimiter,
     PostgresRevisionStore,
+    PostgresSecurityAuditStore,
     PostgresWorkOrderStore,
     _is_integrity_error,
 )
@@ -309,6 +311,47 @@ def test_postgres_revision_paths() -> None:
             batch_id="batch",
             original_generated_at=timestamp,
         )
+
+
+def test_postgres_security_audit_paths() -> None:
+    store, connection, _ = _pooled_store(PostgresSecurityAuditStore)
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
+    event = SecurityAuditEvent(
+        event_id="event-1",
+        occurred_at=timestamp,
+        event_type="authorization.denied",
+        subject="user-1",
+        reason="customer",
+        path="/api/test",
+        customer_id="tenant",
+        trace_id="trace",
+    )
+    store.record(event)
+    connection.the_cursor.fetchall_value = [
+        (
+            event.event_id,
+            event.occurred_at,
+            event.event_type,
+            event.subject,
+            event.reason,
+            event.path,
+            event.customer_id,
+            event.trace_id,
+        )
+    ]
+    assert store.list_for_period(
+        "tenant",
+        datetime(2025, 1, 1, tzinfo=UTC),
+        datetime(2027, 1, 1, tzinfo=UTC),
+        limit=10,
+        offset=1,
+    ) == [event]
+    with pytest.raises(ValueError, match="timezone-aware"):
+        store.list_for_period("tenant", datetime(2025, 1, 1), timestamp)
+    connection.the_cursor.rowcount = 3
+    assert store.purge_before(timestamp) == 3
+    with pytest.raises(ValueError, match="timezone-aware"):
+        store.purge_before(datetime(2026, 1, 1))
 
 
 def test_postgres_optimization_paths() -> None:

@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     task_worker_max_attempts: int = 3
     task_worker_poll_seconds: float = 0.2
     task_visibility_timeout_seconds: int = 300
+    security_audit_retention_days: int = 365
 
     # ── persistence / output ──────────────────────────────────────────────
     persistence_backend: Literal["sqlite", "postgres"] = "sqlite"
@@ -122,6 +123,7 @@ class Settings(BaseSettings):
         "scan_concurrency",
         "task_worker_max_attempts",
         "task_visibility_timeout_seconds",
+        "security_audit_retention_days",
         "postgres_pool_min_size",
         "postgres_pool_max_size",
         "sap_b1_page_size",

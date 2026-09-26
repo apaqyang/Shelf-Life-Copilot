@@ -51,7 +51,9 @@ export POSTGRES_POOL_MAX_SIZE=10
 
 ## OIDC、Prometheus 与 Trace
 
-生产建议安装 `.[oidc,observability,postgres]`，设置 `AUTH_MODE=oidc` 及 issuer/audience/JWKS URL。OIDC 客户端必须在 `customer_ids` 声明发放租户列表，在 `roles` 声明发放 `viewer`、`operator` 或 `admin`。角色或租户拒绝会增加 `authorization_denied_total` 并输出 `authorization.denied` 审计事件。
+生产建议安装 `.[oidc,observability,postgres]`，设置 `AUTH_MODE=oidc` 及 issuer/audience/JWKS URL。OIDC 客户端必须在 `customer_ids` 声明发放租户列表，在 `roles` 声明发放 `viewer`、`operator` 或 `admin`。角色或租户拒绝会增加 `authorization_denied_total`，输出 `authorization.denied` 日志，并在当前持久化后端写入只追加审计事件；事件不保存 token、请求体或库存载荷。
+
+`SECURITY_AUDIT_RETENTION_DAYS` 默认 365。应用启动时删除更早的 `security_audit_events`，因此数据库备份/归档周期必须短于该值；需延长在线调查窗口时应在所有实例统一调整。管理员可调用 `GET /api/security/audit-events?customer_id=...&start=...&end=...` 分页检索其获授权租户。审计写入故障不会放行请求，原拒绝仍返回 `403`；应对 `security_audit_persistence_failure_total` 告警并立即检查数据库。清理数量记录在 `security_audit_purged_total`。
 
 Prometheus 应拉取每个实例的 `/metrics`；不要对该端点做单实例粘滞会话。设置 `OTEL_EXPORTER_OTLP_ENDPOINT` 后应用将 FastAPI span 导出到 OTLP/HTTP collector。反向代理必须保留 `traceparent` 请求头和响应头。
 

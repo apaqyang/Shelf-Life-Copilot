@@ -19,6 +19,7 @@ from src.api.schemas import (
     OptimizationPlanRequest,
     OptimizationPlanResponse,
     PageInfo,
+    SecurityAuditListResponse,
     WorkOrderCompletionRequest,
     WorkOrderCompletionResponse,
     WorkOrderListResponse,
@@ -34,6 +35,7 @@ from src.persistence import (
     DecisionRepository,
     IdempotencyRepository,
     OptimizationPlanRepository,
+    SecurityAuditRepository,
     WorkOrderRepository,
 )
 from src.quality import OutcomeQualityReport, build_outcome_quality_report
@@ -118,6 +120,30 @@ def _work_order_store(request: Request) -> WorkOrderRepository:
 
 def _optimization_store(request: Request) -> OptimizationPlanRepository:
     return cast(OptimizationPlanRepository, request.app.state.optimization_plan_store)
+
+
+@router.get("/security/audit-events", response_model=SecurityAuditListResponse)
+async def list_security_audit_events(
+    request: Request,
+    principal: AdminPrincipal,
+    customer_id: str,
+    start: datetime,
+    end: datetime,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: Annotated[int, Query(ge=0)] = 0,
+) -> SecurityAuditListResponse:
+    authorize_customer(request, principal, customer_id)
+    if start.tzinfo is None or end.tzinfo is None or start >= end:
+        raise HTTPException(status_code=422, detail="audit period must be an ordered aware range")
+    store = cast(SecurityAuditRepository, request.app.state.security_audit_store)
+    items = store.list_for_period(
+        customer_id,
+        start,
+        end,
+        limit=limit,
+        offset=cursor,
+    )
+    return SecurityAuditListResponse(items=items, page=_page(items, cursor, limit))
 
 
 @router.get("/quality/outcomes", response_model=OutcomeQualityReport)

@@ -277,7 +277,8 @@ LLM 建议生成器核心函数。
 - 企微回调使用时间窗校验和持久化幂等记录防重放；PostgreSQL 的原子 `ON CONFLICT` 认领保证跨实例仅一个处理者
 - 写接口使用请求体上限和按来源/路径限流；SQLite 单节点使用进程内滑动窗口，PostgreSQL 多实例使用数据库事务时间和原子固定窗口计数，共享同一配额；`/api/*` 还要求 Bearer token
 - 共享限流后端不可用时受保护写请求失败关闭并返回 `503`
-- 生产可使用 OIDC JWKS 验证 JWT 签名、issuer、audience 和时间声明；`viewer/operator/admin` 控制路由权限，租户/角色拒绝输出安全审计事件
+- 生产可使用 OIDC JWKS 验证 JWT 签名、issuer、audience 和时间声明；`viewer/operator/admin` 控制路由权限，租户/角色拒绝写入 SQLite/PostgreSQL 只追加安全审计表
+- 租户审计可由管理员通过 `GET /api/security/audit-events` 按 UTC 时间范围分页检索；查询再次校验管理员角色和目标租户。`SECURITY_AUDIT_RETENTION_DAYS`（默认 365）控制启动清理，审计写入失败独立计数且不把原本的 `403` 改成成功
 - v0.5+ 支持私有化部署，库存数据不出客户网
 
 ---
@@ -301,5 +302,4 @@ APScheduler 只负责将每日扫描写入当前后端的持久队列，worker �
 ## 10. 后续开放点
 
 - SAP Business One 真实厂商沙箱在线验收（适配器与离线契约已完成）
-- OIDC 审计日志的长期归档策略
 - 已核实样本累积后的 provider 策略自动晋级

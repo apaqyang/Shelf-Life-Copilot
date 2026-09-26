@@ -100,18 +100,21 @@ class TestLifespanWithoutLlmKey:
             work_order_store = app.state.work_order_store
             idempotency_store = app.state.idempotency_store
             optimization_plan_store = app.state.optimization_plan_store
+            security_audit_store = app.state.security_audit_store
             task_queue = app.state.task_queue
             assert decision_store.closed is False
             assert suggestion_store.closed is False
             assert work_order_store.closed is False
             assert idempotency_store.closed is False
             assert optimization_plan_store.closed is False
+            assert security_audit_store.closed is False
             assert task_queue.closed is False
         assert decision_store.closed is True
         assert suggestion_store.closed is True
         assert work_order_store.closed is True
         assert idempotency_store.closed is True
         assert optimization_plan_store.closed is True
+        assert security_audit_store.closed is True
         assert task_queue.closed is True
 
     def test_production_refuses_plaintext_webhook_crypto(self, base_settings: Settings) -> None:

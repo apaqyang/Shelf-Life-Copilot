@@ -24,6 +24,7 @@ from src.models import (
     WorkOrderStatus,
 )
 from src.optimization import OptimizationPlan, OptimizationPlanStatus
+from src.persistence.audit_store import SecurityAuditEvent, validate_audit_query
 from src.persistence.idempotency_store import IdempotencyRecord
 from src.persistence.revision_store import RevisionSession
 
@@ -143,6 +144,14 @@ POSTGRES_SCHEMA = (
         PRIMARY KEY(rate_key, window_started_at))""",
     """CREATE INDEX IF NOT EXISTS idx_rate_limit_windows_cleanup
         ON rate_limit_windows(window_started_at)""",
+    """CREATE TABLE IF NOT EXISTS security_audit_events (
+        event_id TEXT PRIMARY KEY, occurred_at TIMESTAMPTZ NOT NULL,
+        event_type TEXT NOT NULL, subject TEXT NOT NULL, reason TEXT NOT NULL,
+        path TEXT NOT NULL, customer_id TEXT, trace_id TEXT)""",
+    """CREATE INDEX IF NOT EXISTS idx_security_audit_period
+        ON security_audit_events(occurred_at DESC)""",
+    """CREATE INDEX IF NOT EXISTS idx_security_audit_customer_period
+        ON security_audit_events(customer_id, occurred_at DESC)""",
 )
 
 
@@ -151,10 +160,15 @@ def run_postgres_migrations(connection: Connection) -> None:
     try:
         for statement in POSTGRES_SCHEMA:
             cursor.execute(statement)
-        cursor.execute(
-            "INSERT INTO schema_migrations(version, name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+        for marker in (
             (8, "shared_rate_limit_windows"),
-        )
+            (9, "security_audit_archive"),
+        ):
+            cursor.execute(
+                "INSERT INTO schema_migrations(version, name) "
+                "VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                marker,
+            )
         connection.commit()
     except Exception:
         connection.rollback()
@@ -164,6 +178,19 @@ def run_postgres_migrations(connection: Connection) -> None:
 def _is_integrity_error(exc: Exception) -> bool:
     sqlstate = getattr(exc, "sqlstate", "")
     return exc.__class__.__name__.endswith("IntegrityError") or str(sqlstate).startswith("23")
+
+
+def _security_audit_from_row(row: tuple[object, ...]) -> SecurityAuditEvent:
+    return SecurityAuditEvent(
+        event_id=str(row[0]),
+        occurred_at=cast(datetime, row[1]),
+        event_type=str(row[2]),
+        subject=str(row[3]),
+        reason=str(row[4]),
+        path=str(row[5]),
+        customer_id=None if row[6] is None else str(row[6]),
+        trace_id=None if row[7] is None else str(row[7]),
+    )
 
 
 class _PostgresStore:
@@ -261,6 +288,72 @@ class PostgresRateLimiter(_PostgresStore):
             except Exception:
                 connection.rollback()
                 raise
+
+
+class PostgresSecurityAuditStore(_PostgresStore):
+    """PostgreSQL security archive shared across application instances."""
+
+    def record(self, event: SecurityAuditEvent) -> None:
+        with self._borrow() as connection:
+            connection.cursor().execute(
+                """INSERT INTO security_audit_events (
+                       event_id, occurred_at, event_type, subject, reason, path,
+                       customer_id, trace_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    event.event_id,
+                    event.occurred_at.astimezone(UTC),
+                    event.event_type,
+                    event.subject,
+                    event.reason,
+                    event.path,
+                    event.customer_id,
+                    event.trace_id,
+                ),
+            )
+            connection.commit()
+
+    def list_for_period(
+        self,
+        customer_id: str,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[SecurityAuditEvent]:
+        validate_audit_query(start, end, limit=limit, offset=offset)
+        with self._borrow() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                """SELECT event_id, occurred_at, event_type, subject, reason, path,
+                          customer_id, trace_id
+                   FROM security_audit_events
+                   WHERE customer_id = %s AND occurred_at >= %s AND occurred_at < %s
+                   ORDER BY occurred_at DESC, event_id ASC
+                   LIMIT %s OFFSET %s""",
+                (
+                    customer_id,
+                    start.astimezone(UTC),
+                    end.astimezone(UTC),
+                    limit,
+                    offset,
+                ),
+            )
+            return [_security_audit_from_row(row) for row in cursor.fetchall()]
+
+    def purge_before(self, cutoff: datetime) -> int:
+        if cutoff.tzinfo is None:
+            raise ValueError("audit retention cutoff must be timezone-aware")
+        with self._borrow() as connection:
+            cursor = connection.cursor()
+            cursor.execute(
+                "DELETE FROM security_audit_events WHERE occurred_at < %s",
+                (cutoff.astimezone(UTC),),
+            )
+            deleted = cursor.rowcount
+            connection.commit()
+            return deleted
 
 
 class PostgresDecisionStore(_PostgresStore):

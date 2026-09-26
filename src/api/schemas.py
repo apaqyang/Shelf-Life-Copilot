@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, NonNegativeFloat
 
 from src.models import ActionType, Batch, WorkOrder
 from src.optimization import OptimizationGate, OptimizationPlan
+from src.persistence import SecurityAuditEvent
 
 
 class PageInfo(BaseModel):
@@ -30,6 +31,11 @@ class BatchListResponse(BaseModel):
 
 class WorkOrderListResponse(BaseModel):
     items: list[WorkOrder]
+    page: PageInfo
+
+
+class SecurityAuditListResponse(BaseModel):
+    items: list[SecurityAuditEvent]
     page: PageInfo
 
 

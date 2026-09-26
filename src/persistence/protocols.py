@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 
 from src.models import Decision, Suggestion, WorkOrder, WorkOrderReceipt, WorkOrderStatus
 from src.optimization import OptimizationPlan
+from src.persistence.audit_store import SecurityAuditEvent
 from src.persistence.idempotency_store import IdempotencyRecord
 from src.persistence.revision_store import RevisionSession
 
@@ -120,5 +121,24 @@ class OptimizationPlanRepository(Protocol):
     def execute(
         self, plan_id: str, *, approved_by: str, approved_at: datetime
     ) -> OptimizationPlan: ...  # pragma: no cover
+
+    def close(self) -> None: ...  # pragma: no cover
+
+
+@runtime_checkable
+class SecurityAuditRepository(Protocol):
+    def record(self, event: SecurityAuditEvent) -> None: ...  # pragma: no cover
+
+    def list_for_period(
+        self,
+        customer_id: str,
+        start: datetime,
+        end: datetime,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[SecurityAuditEvent]: ...  # pragma: no cover
+
+    def purge_before(self, cutoff: datetime) -> int: ...  # pragma: no cover
 
     def close(self) -> None: ...  # pragma: no cover

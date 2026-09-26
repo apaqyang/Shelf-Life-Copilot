@@ -20,6 +20,7 @@ from src.models import (
     WorkOrder,
     WorkOrderStatus,
 )
+from src.persistence import SecurityAuditEvent
 from src.runtime.config import Settings
 from src.runtime.lifespan import build_lifespan
 from src.runtime.security import RequestGuardMiddleware
@@ -122,6 +123,55 @@ def test_quality_outcome_api_uses_verified_persistence_data(settings: Settings) 
             },
             headers={"Authorization": "Bearer secret"},
         )
+    assert invalid.status_code == 422
+
+
+def test_admin_can_query_only_tenant_scoped_security_audit(settings: Settings) -> None:
+    app = _app(settings)
+    with TestClient(app) as client:
+        app.state.security_audit_store.record(
+            SecurityAuditEvent(
+                event_id="denial-1",
+                occurred_at=datetime(2026, 6, 1, tzinfo=UTC),
+                event_type="authorization.denied",
+                subject="operator-1",
+                reason="customer",
+                path="/api/customers/customerB/batches",
+                customer_id="customerA",
+            )
+        )
+        response = client.get(
+            "/api/security/audit-events",
+            params={
+                "customer_id": "customerA",
+                "start": "2026-01-01T00:00:00Z",
+                "end": "2027-01-01T00:00:00Z",
+                "limit": 1,
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+        forbidden = client.get(
+            "/api/security/audit-events",
+            params={
+                "customer_id": "customerB",
+                "start": "2026-01-01T00:00:00Z",
+                "end": "2027-01-01T00:00:00Z",
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+        invalid = client.get(
+            "/api/security/audit-events",
+            params={
+                "customer_id": "customerA",
+                "start": "2027-01-01T00:00:00",
+                "end": "2026-01-01T00:00:00",
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+    assert response.status_code == 200
+    assert response.json()["items"][0]["event_id"] == "denial-1"
+    assert response.json()["page"] == {"next_cursor": 1}
+    assert forbidden.status_code == 403
     assert invalid.status_code == 422
 
 

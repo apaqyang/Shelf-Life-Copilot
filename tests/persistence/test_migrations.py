@@ -34,6 +34,7 @@ def test_new_database_reaches_latest_version_and_reopen_is_idempotent(tmp_path: 
             "work_orders",
             "optimization_plans",
             "task_queue",
+            "security_audit_events",
         } <= _tables(connection)
 
 

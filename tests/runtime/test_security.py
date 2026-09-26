@@ -175,6 +175,18 @@ def test_oidc_claims_drive_identity_roles_and_tenant_audit() -> None:
     assert tenant_denied.status_code == 403
 
 
+def test_audit_backend_failure_does_not_change_denial_result() -> None:
+    class BrokenAuditStore:
+        def record(self, event: object) -> None:
+            raise RuntimeError("archive unavailable")
+
+    app = _oidc_app({"sub": "user-1", "customer_ids": ["tenant-a"], "roles": ["viewer"]})
+    app.state.security_audit_store = BrokenAuditStore()
+    with TestClient(app) as client:
+        response = client.get("/admin", headers={"Authorization": "Bearer signed"})
+    assert response.status_code == 403
+
+
 @pytest.mark.parametrize(
     "claims",
     [

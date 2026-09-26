@@ -16,7 +16,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
-from src.observability import log_event, metrics
+from src.observability import current_traceparent, log_event, metrics
+from src.persistence import SecurityAuditEvent, SecurityAuditRepository
 from src.runtime.config import Settings
 from src.runtime.tenant import Principal, Role
 
@@ -151,14 +152,41 @@ def _claim_values(claims: dict[str, Any], name: str) -> frozenset[str]:
     raise HTTPException(status_code=401, detail=f"invalid {name} claim")
 
 
-def _audit_denial(request: Request, principal: Principal, reason: str) -> None:
+def _audit_denial(
+    request: Request,
+    principal: Principal,
+    reason: str,
+    *,
+    customer_id: str | None = None,
+) -> None:
+    event = SecurityAuditEvent(
+        event_type="authorization.denied",
+        subject=principal.subject,
+        reason=reason,
+        path=request.url.path,
+        customer_id=customer_id,
+        trace_id=current_traceparent(),
+    )
+    store = cast(
+        SecurityAuditRepository | None,
+        getattr(request.app.state, "security_audit_store", None),
+    )
+    if store is not None:
+        try:
+            store.record(event)
+        except Exception as exc:
+            metrics.increment("security_audit_persistence_failure_total")
+            logger.warning(
+                "security_audit.persistence_failed",
+                extra={"path": request.url.path, "error_type": type(exc).__name__},
+            )
     metrics.increment("authorization_denied_total")
     log_event(
         logger,
         logging.WARNING,
         "authorization.denied",
-        customer_id="-",
-        correlation_id=request.headers.get("traceparent", "-"),
+        customer_id=customer_id or "-",
+        correlation_id=event.trace_id or "-",
         result="denied",
         duration_ms=0,
         subject=principal.subject,
@@ -220,7 +248,7 @@ def authorize_customer(request: Request, principal: Principal, customer_id: str)
     try:
         principal.require_customer(customer_id)
     except HTTPException:
-        _audit_denial(request, principal, "customer")
+        _audit_denial(request, principal, "customer", customer_id=customer_id)
         raise
 
 
